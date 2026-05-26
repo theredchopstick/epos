@@ -28,9 +28,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .elev-err{padding:6px 18px;font-size:11px;color:#f07070;text-align:center;min-height:24px}
 @keyframes elev-shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
 .elev-modal.shake{animation:elev-shake .3s ease}
-.role-badge{font-size:9px;padding:1px 6px;border-radius:2px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;border:1px solid;user-select:none}
-.role-badge.manager{background:rgba(201,151,58,.15);color:var(--gold2);border-color:var(--gold)}
-.role-badge.waiter{background:rgba(100,100,100,.1);color:var(--text3);border-color:var(--border2)}
 .view{display:none;flex:1;overflow:hidden}.view.active{display:flex}
 .pos-layout{display:flex;flex:1;overflow:hidden;width:100%}
 .tables-sidebar{width:200px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
@@ -854,25 +851,41 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 </div>
 
 <div class="overlay" id="staffOverlay" style="display:none" onclick="if(event.target===this)closeStaff()">
-  <div class="modal" style="width:400px">
-    <div class="modal-header"><span class="modal-title">Manage Staff</span><button class="modal-close" onclick="closeStaff()">X</button></div>
-    <div class="modal-body">
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-height:220px;overflow-y:auto" id="staffList"></div>
-      <div class="section-head">Add Staff Member</div>
-      <div class="form-row">
-        <span class="form-label">Name</span>
-        <input class="form-input" id="newStaffName" placeholder="e.g. Sarah">
-        <select class="form-select" id="newStaffRole" style="max-width:100px;margin-left:6px">
-          <option value="waiter">Waiter</option>
-          <option value="manager">Manager</option>
-        </select>
-        <button class="btn btn-kitchen" style="padding:5px 10px;font-size:11px;margin-left:6px" onclick="addStaff()">Add</button>
-      </div>
-      <div class="section-head" style="margin-top:12px">Manager Code</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Code <span style="font-family:var(--mono);color:var(--gold2);letter-spacing:2px">21393</span> — grants any user temporary manager access for their session. Share only with managers.</div>
-      <div style="font-size:10px;color:var(--text3)">Tip: staff with Manager role never need the code — they sign in with full access automatically.</div>
+  <div class="modal" style="width:460px">
+    <div class="modal-header">
+      <span class="modal-title">Staff</span>
+      <button class="modal-close" onclick="closeStaff()">X</button>
     </div>
-    <div class="modal-footer"><button class="btn btn-primary" onclick="closeStaff()">Done</button></div>
+    <div class="modal-body" style="padding:0">
+
+      <!-- Staff list -->
+      <div style="padding:12px 18px 0">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px">Current Staff</div>
+        <div id="staffList" style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto;margin-bottom:4px"></div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);margin-top:14px;padding:14px 18px 0">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:10px">Add Staff Member</div>
+        <div class="form-row" style="margin-bottom:8px">
+          <span class="form-label">Name</span>
+          <input class="form-input" id="newStaffName" placeholder="First name">
+        </div>
+        <div class="form-row" style="margin-bottom:0">
+          <span class="form-label">Note</span>
+          <input class="form-input" id="newStaffNotes" placeholder="e.g. Part-time, allergic to nuts…">
+          <button class="btn btn-kitchen" style="padding:5px 12px;font-size:11px;margin-left:8px;flex-shrink:0" onclick="addStaff()">Add</button>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);margin-top:14px;padding:14px 18px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:6px">Manager Code</div>
+        <div style="font-size:11px;color:var(--text2)">Code <span style="font-family:var(--mono);color:var(--gold2);letter-spacing:3px;font-size:13px">21393</span> unlocks protected actions for the current session. Share with managers only.</div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" style="flex:1" onclick="closeStaff()">Done</button>
+    </div>
   </div>
 </div>
 <script>
@@ -945,17 +958,16 @@ function initFirebaseSync() {
       if (data.reservations) reservations = data.reservations;
       if (data.eightySixItems) eightySixItems = data.eightySixItems;
       if (data.staff && data.staff.length) {
-        var knownMgrs = ['Kevin','Vivian','Brandon','Simon','Manager'];
         staff = data.staff.map(function(s) {
-          if (typeof s === 'string') {
-            return { name: s, role: knownMgrs.indexOf(s) !== -1 ? 'manager' : 'waiter' };
-          }
-          return s;
+          if (typeof s === 'string') return { name: s };
+          var out = { name: s.name };
+          if (s.notes) out.notes = s.notes;
+          return out;
         });
         _staffDefaulted = true;
       } else if (!_staffDefaulted) {
         _staffDefaulted = true;
-        syncToFirebase(); // write Kevin/Vivian/Brandon/Simon defaults
+        syncToFirebase(); // write defaults
       }
       if (data.kitchenDoneItems) kitchenDoneItems = data.kitchenDoneItems;
       if (data.tableNotes) tableNotes = data.tableNotes; else tableNotes = {};
@@ -1147,7 +1159,7 @@ var TABLES = [
 // ══ STATE ══
 var currentTable='G1',currentCat='Starters',serviceOn=true,svcOverride=null,selectedPayMethod='cash',orderFilter='all';
 var currentUser = null;
-var currentUserRole = 'waiter';      // 'waiter' | 'manager'
+// role system removed — use code 21393 for elevation
 var currentUserElevated = false;     // true if code 21393 entered this session
 var tableOrders={},completedOrders=[],voidLog=[],tipLog=[],orderCounter=1;
 var pendingVoid=null,splitSeats=[],mergeTargets=[],transferTarget=null,transferSelectedItems=[];
@@ -1166,10 +1178,10 @@ var WAITER_COLOURS = ['#2980b9','#27ae60','#8e44ad','#e67e22','#16a085','#c0392b
 
 // ── DEFAULT STAFF — Kevin, Vivian, Brandon, Simon all manager ──
 var staff = [
-  { name: 'Kevin',   role: 'manager' },
-  { name: 'Vivian',  role: 'manager' },
-  { name: 'Brandon', role: 'manager' },
-  { name: 'Simon',   role: 'manager' }
+  { name: 'Kevin' },
+  { name: 'Vivian' },
+  { name: 'Brandon' },
+  { name: 'Simon' }
 ];
 var _staffDefaulted = false;
 
@@ -1183,17 +1195,7 @@ var MANAGER_CODE = '21393';
 function isManager() {
   if (!currentUser) return true;                // open terminal — no one signed in
   if (currentUserElevated) return true;         // code 21393 entered this session
-  return false;                                 // role alone is not enough — code always required
-}
-
-function _getStaffRole(name) {
-  for (var i = 0; i < staff.length; i++) {
-    var s = staff[i];
-    var sName = typeof s === 'string' ? s : s.name;
-    if (sName === name) return (typeof s === 'object' && s.role) ? s.role : 'waiter';
-  }
-  if (name === 'Manager') return 'manager';
-  return 'waiter';
+  return false;                                 // code always required
 }
 
 function _updateMgrChip() {
@@ -1211,6 +1213,11 @@ var _elevActionPending = null;   // stored callback to run after successful elev
 
 function requireElevation(actionLabel, onSuccess) {
   if (isManager()) { onSuccess(); return; }
+  if (!currentUser) {
+    toast('Please sign in first', 'red');
+    showWhoOverlay();
+    return;
+  }
   _elevActionPending = onSuccess;
   _elevValue = '';
   document.getElementById('elevActionLabel').textContent = actionLabel || 'Manager authorisation required.';
@@ -1296,28 +1303,25 @@ function showWhoOverlay() {
   var btns = document.getElementById('whoStaffBtns');
   btns.innerHTML = '';
   if (!staff.length) {
-    setCurrentUser('Manager', 'manager');
+    setCurrentUser('Manager');
     return;
   }
   for (var i = 0; i < staff.length; i++) {
     (function(member) {
       var name = typeof member === 'string' ? member : member.name;
-      var role = typeof member === 'object' ? (member.role || 'waiter') : 'waiter';
       var btn = document.createElement('button');
       btn.className = 'btn btn-ghost';
-      btn.style.cssText = 'width:100%;text-align:left;font-size:13px;padding:10px 14px;justify-content:flex-start;display:flex;align-items:center;gap:8px';
-      btn.innerHTML = '<span style="flex:1">' + name + '</span>' +
-        '<span class="role-badge ' + role + '">' + role + '</span>';
-      btn.onclick = function(){ setCurrentUser(name, role); };
+      btn.style.cssText = 'width:100%;text-align:left;font-size:13px;padding:10px 14px;justify-content:flex-start';
+      btn.textContent = name;
+      btn.onclick = function(){ setCurrentUser(name); };
       btns.appendChild(btn);
     })(staff[i]);
   }
   overlay.style.display = 'flex';
 }
 
-function setCurrentUser(name, role) {
+function setCurrentUser(name) {
   currentUser = name;
-  currentUserRole = role || _getStaffRole(name);
   currentUserElevated = false;
   document.getElementById('whoOverlay').style.display = 'none';
   var userLabel = document.getElementById('currentUserLabel');
@@ -1544,33 +1548,25 @@ function renderStaffList(){
   for(var i=0;i<staff.length;i++){
     (function(member,idx){
       var name=typeof member==='string'?member:member.name;
-      var role=typeof member==='object'&&member.role?member.role:'waiter';
+      var notes=typeof member==='object'?member.notes||'':'';
       var row=document.createElement('div');row.className='staff-row';
       row.innerHTML='<span class="staff-name">'+name+'</span>'+
-        '<span class="role-badge '+role+'" onclick="toggleStaffRole('+idx+')" title="Click to toggle role">'+role+'</span>'+
+        (notes?'<span style="font-size:10px;color:var(--text3);font-style:italic;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+notes+'</span>':'<span style="flex:1"></span>')+
         '<button class="staff-del" onclick="removeStaff('+idx+')">Remove</button>';
       c.appendChild(row);
     })(staff[i],i);
   }
 }
-function toggleStaffRole(idx){
-  var s=staff[idx];
-  if(typeof s==='string') s={name:s,role:'waiter'};
-  s.role=(s.role==='manager')?'waiter':'manager';
-  staff[idx]=s;
-  syncStaffNow();renderStaffList();
-  toast(s.name+' is now '+s.role,'green');
-}
 function addStaff(){
   var name=document.getElementById('newStaffName').value.trim();
   if(!name)return;
-  var roleEl=document.getElementById('newStaffRole');
-  var role=roleEl?roleEl.value:'waiter';
-  staff.push({name:name,role:role});
+  var notes=document.getElementById('newStaffNotes').value.trim();
+  staff.push({name:name,notes:notes||''});
   document.getElementById('newStaffName').value='';
+  document.getElementById('newStaffNotes').value='';
   syncStaffNow();
   renderStaffList();rebuildWaiterSelects();
-  toast(name+' added as '+role);
+  toast(name+' added to staff');
 }
 function removeStaff(idx){
   staff.splice(idx,1);
@@ -2224,12 +2220,11 @@ initFirebaseSync = function() {
       if (data.reservations) reservations = data.reservations;
       if (data.eightySixItems) eightySixItems = data.eightySixItems;
       if (data.staff && data.staff.length) {
-        var knownMgrs2 = ['Kevin','Vivian','Brandon','Simon','Manager'];
         staff = data.staff.map(function(s) {
-          if (typeof s === 'string') {
-            return { name: s, role: knownMgrs2.indexOf(s) !== -1 ? 'manager' : 'waiter' };
-          }
-          return s;
+          if (typeof s === 'string') return { name: s };
+          var out = { name: s.name };
+          if (s.notes) out.notes = s.notes;
+          return out;
         });
         _staffDefaulted = true;
       } else if (!_staffDefaulted) {
@@ -2268,8 +2263,8 @@ initFirebaseSync = function() {
         if (id==='viewKitchen') renderKitchen();
       }
       showSyncStatus('synced');
-      // Prompt sign-in once staff list is loaded
-      if (!currentUser) showWhoOverlay();
+      // Prompt sign-in once staff list is loaded — but not if another modal is already open
+      if (!currentUser && document.getElementById('elevOverlay').style.display === 'none' && document.getElementById('staffOverlay').style.display === 'none') showWhoOverlay();
     });
     showSyncStatus('connected');
   });
