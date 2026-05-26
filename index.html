@@ -375,6 +375,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
     <button onclick="openStaff()" style="padding:4px 10px;border-radius:3px;border:1px solid var(--border2);background:none;color:var(--text2);font-size:10px;font-family:var(--font);cursor:pointer;letter-spacing:.5px;text-transform:uppercase">Staff</button>
     <button onclick="showWhoOverlay()" style="padding:4px 10px;border-radius:3px;border:1px solid var(--gold);background:none;font-size:10px;font-family:var(--font);cursor:pointer;letter-spacing:.5px;text-transform:uppercase;color:var(--gold2)" title="Switch user"><span id="currentUserLabel">Sign In</span><span id="mgrChip" class="mgr-chip" style="display:none">MGR</span></button>
     <button onclick="open86()" style="padding:4px 10px;border-radius:3px;border:1px solid var(--red);background:none;color:#f07070;font-size:10px;font-family:var(--font);cursor:pointer;letter-spacing:.5px;text-transform:uppercase" id="e86TopBtn">86 Board</button>
+    <button onclick="openPlannedShifts()" id="plannedShiftBtn" style="padding:4px 10px;border-radius:3px;border:1px solid var(--blue);background:none;color:var(--blue2);font-size:10px;font-family:var(--font);cursor:pointer;letter-spacing:.5px;text-transform:uppercase">📅 Schedule</button>
     <button onclick="openShift()" id="shiftBtn" style="padding:4px 10px;border-radius:3px;border:1px solid var(--green);background:none;color:var(--green2);font-size:10px;font-family:var(--font);cursor:pointer;letter-spacing:.5px;text-transform:uppercase">Open Shift</button>
     <div id="syncDot" class="status-dot" style="background:#888;box-shadow:none"></div><span id="syncLabel" style="font-size:10px;color:var(--text3);letter-spacing:.5px">Connecting...</span>
     <div class="clock" id="clock">00:00:00</div>
@@ -421,6 +422,22 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
     </div>
     <div class="fp-popup-body" id="fpPopupBody"></div>
     <div class="fp-popup-ftr" id="fpPopupFtr"></div>
+  </div>
+</div>
+
+<!-- CANCELLATION REASON MODAL -->
+<div class="confirm-overlay" id="cancelShiftOverlay" style="display:none">
+  <div class="confirm-modal" style="width:400px">
+    <div class="confirm-hdr"><div class="confirm-title" id="cancelShiftTitle">Cancel Service</div></div>
+    <div class="confirm-body">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">This will post a public cancellation notice to Discord with @here.</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px">Reason <span style="color:var(--text3)">(optional — shown publicly)</span></div>
+      <input class="form-input" id="cancelShiftReason" placeholder="e.g. Unexpected closure, staff illness, private event…" style="width:100%">
+    </div>
+    <div class="confirm-ftr">
+      <button class="btn btn-ghost" onclick="closeCancelShiftModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmCancelShift()" style="border-color:#922;background:#922">Post Cancellation</button>
+    </div>
   </div>
 </div>
 
@@ -794,6 +811,72 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
   </div>
 </div>
 
+<!-- PLANNED SHIFTS MODAL -->
+<div class="overlay" id="plannedShiftsOverlay" style="display:none" onclick="if(event.target===this)closePlannedShifts()">
+  <div class="modal" style="width:520px;max-height:90vh">
+    <div class="modal-header">
+      <span class="modal-title">Scheduled Shifts</span>
+      <button class="modal-close" onclick="closePlannedShifts()">X</button>
+    </div>
+    <div class="modal-body" style="padding:0;overflow-y:auto">
+
+      <!-- Upcoming list -->
+      <div style="padding:14px 18px 0">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:10px">Upcoming</div>
+        <div id="plannedShiftsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px"></div>
+      </div>
+
+      <!-- Add / Edit form -->
+      <div style="border-top:1px solid var(--border);margin-top:16px;padding:14px 18px" id="plannedShiftFormWrap">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:12px" id="plannedShiftFormTitle">Plan a Shift</div>
+
+        <div class="form-row">
+          <span class="form-label">Date</span>
+          <input class="form-input" id="psDate" type="date">
+        </div>
+        <div class="form-row">
+          <span class="form-label">Period</span>
+          <select class="form-select" id="psPeriod">
+            <option value="Lunch">Lunch</option>
+            <option value="Dinner" selected>Dinner</option>
+            <option value="All Day">All Day</option>
+          </select>
+          <span style="font-size:11px;color:var(--text3);margin:0 8px;flex-shrink:0">from</span>
+          <input class="form-input" id="psTime" type="time" value="17:30" style="max-width:100px">
+        </div>
+        <div class="form-row">
+          <span class="form-label">Specials</span>
+          <input class="form-input" id="psSpecials" placeholder="Tonight's special dish or highlight…">
+        </div>
+        <div class="form-row">
+          <span class="form-label">Event</span>
+          <input class="form-input" id="psEvent" placeholder="Private dining, live music, themed night… (optional)">
+        </div>
+        <div class="form-row" style="align-items:flex-start">
+          <span class="form-label" style="padding-top:4px">Floor</span>
+          <div id="psStaffChecks" style="display:flex;flex-wrap:wrap;gap:6px;flex:1"></div>
+        </div>
+        <div class="form-row">
+          <span class="form-label">Booking link</span>
+          <input class="form-input" id="psBookingLink" placeholder="https://…">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <input type="checkbox" id="psPostNow" checked style="accent-color:var(--blue2);width:14px;height:14px">
+          <label for="psPostNow" style="font-size:11px;color:var(--text2);cursor:pointer">Post to Discord now</label>
+          <span style="flex:1"></span>
+          <input type="checkbox" id="psPostReminder" checked style="accent-color:var(--blue2);width:14px;height:14px">
+          <label for="psPostReminder" style="font-size:11px;color:var(--text2);cursor:pointer">Morning-of reminder</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closePlannedShifts()">Cancel</button>
+      <button class="btn btn-ghost" id="psDeleteBtn" style="display:none;border-color:#922;color:#f07070" onclick="deletePlannedShift()">Delete</button>
+      <button class="btn btn-primary" style="flex:1" onclick="savePlannedShift()">Save & Post</button>
+    </div>
+  </div>
+</div>
+
 <!-- SHIFT OPEN MODAL -->
 <div class="overlay" id="shiftOpenOverlay" style="display:none" onclick="if(event.target===this)closeShiftOpen()">
   <div class="modal" style="width:420px">
@@ -928,7 +1011,9 @@ function syncToFirebase() {
         fpLayout: fpLayout,
         tableNotes: tableNotes,
         firedCourses: firedCourses,
-        authLog: authLog
+        authLog: authLog,
+        plannedShifts: plannedShifts,
+        plannedShiftCounter: plannedShiftCounter
       };
       window._fbSet(window._fbRef(window._db, 'epos'), JSON.parse(JSON.stringify(payload)));
     } catch(e) {
@@ -973,6 +1058,8 @@ function initFirebaseSync() {
       if (data.tableNotes) tableNotes = data.tableNotes; else tableNotes = {};
       if (data.firedCourses) firedCourses = data.firedCourses; else firedCourses = {};
       if (data.authLog) authLog = data.authLog;
+      if (data.plannedShifts) plannedShifts = data.plannedShifts;
+      if (data.plannedShiftCounter && data.plannedShiftCounter > plannedShiftCounter) plannedShiftCounter = data.plannedShiftCounter;
       if (data.orderCounter && data.orderCounter > orderCounter) orderCounter = data.orderCounter;
       if (data.resCounter && data.resCounter > resCounter) resCounter = data.resCounter;
       // Refresh all visible UI
@@ -1587,7 +1674,7 @@ function syncStaffNow(){
   // Immediate write — no debounce — so staff changes always land
   if(!_syncEnabled||!window._db)return;
   try{
-    var payload={tableOrders:tableOrders,completedOrders:completedOrders,voidLog:voidLog,tipLog:tipLog,reservations:reservations,eightySixItems:eightySixItems,staff:staff,kitchenDoneItems:kitchenDoneItems,orderCounter:orderCounter,resCounter:resCounter,shiftState:shiftState,shiftRecords:shiftRecords,tillHistory:tillHistory,fpLayout:fpLayout,tableNotes:tableNotes,firedCourses:firedCourses,authLog:authLog};
+    var payload={tableOrders:tableOrders,completedOrders:completedOrders,voidLog:voidLog,tipLog:tipLog,reservations:reservations,eightySixItems:eightySixItems,staff:staff,kitchenDoneItems:kitchenDoneItems,orderCounter:orderCounter,resCounter:resCounter,shiftState:shiftState,shiftRecords:shiftRecords,tillHistory:tillHistory,fpLayout:fpLayout,tableNotes:tableNotes,firedCourses:firedCourses,authLog:authLog,plannedShifts:plannedShifts,plannedShiftCounter:plannedShiftCounter};
     window._fbSet(window._fbRef(window._db,'epos'),JSON.parse(JSON.stringify(payload)));
   }catch(e){console.warn('Staff sync error:',e);}
 }
@@ -1661,6 +1748,7 @@ function toast(msg,type){var t=document.getElementById('toast');t.textContent=ms
 // ══════════════════════════════════════════════════
 var WEBHOOK_SHIFTS  = 'https://discord.com/api/webhooks/1508927435469492254/cK6O4vnNGlRb5u0H0YQEQSWc-gjYzUAyvOOoICpws_H6s5FmzWxqGVfSvAHvqgYdxgMG';
 var WEBHOOK_RECORDS = 'https://discord.com/api/webhooks/1508930208713932831/6KNzA_xS1V1JWZLo-YscIQ34YBBUSJroFx7Pz-BntI7mSZtheMixTmfE41JX6i4guxWo';
+var WEBHOOK_PUBLIC  = 'https://discord.com/api/webhooks/1508957065597681664/cdib-LS7gPpXSgmgHGAPbuVzaBTRCOD8KRxH90_IRW-g40Q-Ly4UhfK3iJYeWL7o5Rzw';
 
 function postToDiscord(webhookUrl, content, embeds) {
   var body = {};
@@ -2276,6 +2364,8 @@ initFirebaseSync = function() {
 var fpMode = 'view'; // 'view' | 'edit'
 var fpLayout = {}; // { tableId: { order: N, floorOverride: 'Ground'|'Top'|'Other' } }
 var tillHistory = []; // cash reconciliation records
+var plannedShifts = []; // scheduled future shifts
+var plannedShiftCounter = 1;
 
 function setFpMode(mode, el) {
   fpMode = mode;
@@ -2744,6 +2834,304 @@ function updateKitchenBusyBadge() {
 // OFFLINE INDICATOR
 // ══════════════════════════════════════════════════
 
+
+// ══════════════════════════════════════════════════
+// PLANNED SHIFTS
+// ══════════════════════════════════════════════════
+var _editingPlannedShiftId = null;
+
+function openPlannedShifts() {
+  _editingPlannedShiftId = null;
+  _resetPlannedShiftForm();
+  renderPlannedShiftsList();
+  document.getElementById('plannedShiftsOverlay').style.display = 'flex';
+}
+
+function closePlannedShifts() {
+  document.getElementById('plannedShiftsOverlay').style.display = 'none';
+  _editingPlannedShiftId = null;
+}
+
+function _resetPlannedShiftForm() {
+  // Default date = tomorrow
+  var tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  var ds = tomorrow.getFullYear() + '-' + String(tomorrow.getMonth()+1).padStart(2,'0') + '-' + String(tomorrow.getDate()).padStart(2,'0');
+  document.getElementById('psDate').value = ds;
+  document.getElementById('psPeriod').value = 'Dinner';
+  document.getElementById('psTime').value = '17:30';
+  document.getElementById('psSpecials').value = '';
+  document.getElementById('psEvent').value = '';
+  document.getElementById('psBookingLink').value = '';
+  document.getElementById('psPostNow').checked = true;
+  document.getElementById('psPostReminder').checked = true;
+  document.getElementById('psDeleteBtn').style.display = 'none';
+  document.getElementById('plannedShiftFormTitle').textContent = 'Plan a Shift';
+
+  // Staff checkboxes
+  var container = document.getElementById('psStaffChecks');
+  container.innerHTML = '';
+  for (var i = 0; i < staff.length; i++) {
+    var name = typeof staff[i] === 'string' ? staff[i] : staff[i].name;
+    (function(n) {
+      var label = document.createElement('label');
+      label.style.cssText = 'display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;background:var(--panel2);border:1px solid var(--border);border-radius:3px;padding:3px 8px';
+      label.innerHTML = '<input type="checkbox" data-name="'+n+'" style="accent-color:var(--blue2);width:12px;height:12px"> '+n;
+      container.appendChild(label);
+    })(name);
+  }
+}
+
+function _getPlannedShiftFormValues() {
+  var supervisors = [];
+  var cbs = document.querySelectorAll('#psStaffChecks input[type=checkbox]');
+  for (var i = 0; i < cbs.length; i++) {
+    if (cbs[i].checked) supervisors.push(cbs[i].dataset.name);
+  }
+  return {
+    date:        document.getElementById('psDate').value,
+    period:      document.getElementById('psPeriod').value,
+    time:        document.getElementById('psTime').value,
+    specials:    document.getElementById('psSpecials').value.trim(),
+    event:       document.getElementById('psEvent').value.trim(),
+    supervisors: supervisors,
+    bookingLink: document.getElementById('psBookingLink').value.trim(),
+    postNow:     document.getElementById('psPostNow').checked,
+    postReminder:document.getElementById('psPostReminder').checked
+  };
+}
+
+function savePlannedShift() {
+  var v = _getPlannedShiftFormValues();
+  if (!v.date) { toast('Please set a date', 'red'); return; }
+
+  var id = _editingPlannedShiftId || ('PS' + plannedShiftCounter++);
+
+  // Build Unix timestamp for Discord
+  var unixTs = _plannedShiftUnixTs(v.date, v.time);
+
+  var shift = {
+    id: id,
+    date: v.date,
+    period: v.period,
+    time: v.time,
+    unixTs: unixTs,
+    specials: v.specials,
+    event: v.event,
+    supervisors: v.supervisors,
+    bookingLink: v.bookingLink,
+    postReminder: v.postReminder,
+    reminderFired: false,
+    createdAt: new Date().toISOString()
+  };
+
+  // Upsert
+  var found = false;
+  for (var i = 0; i < plannedShifts.length; i++) {
+    if (plannedShifts[i].id === id) { plannedShifts[i] = shift; found = true; break; }
+  }
+  if (!found) plannedShifts.push(shift);
+
+  syncToFirebase();
+  renderPlannedShiftsList();
+
+  if (v.postNow) {
+    postPlannedShiftToDiscord(shift);
+    toast('Shift saved and posted to Discord', 'green');
+  } else {
+    toast('Shift saved', 'green');
+  }
+
+  _editingPlannedShiftId = null;
+  _resetPlannedShiftForm();
+}
+
+var _cancellingShiftId = null;
+
+function cancelPlannedShift(id) {
+  _cancellingShiftId = id;
+  var shift = null;
+  for (var i = 0; i < plannedShifts.length; i++) {
+    if (plannedShifts[i].id === id) { shift = plannedShifts[i]; break; }
+  }
+  if (!shift) return;
+  var dateStr = new Date(shift.unixTs * 1000).toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
+  document.getElementById('cancelShiftTitle').textContent = 'Cancel — ' + dateStr + ' ' + shift.period;
+  document.getElementById('cancelShiftReason').value = '';
+  document.getElementById('cancelShiftOverlay').style.display = 'flex';
+  setTimeout(function(){ document.getElementById('cancelShiftReason').focus(); }, 100);
+}
+
+function closeCancelShiftModal() {
+  document.getElementById('cancelShiftOverlay').style.display = 'none';
+  _cancellingShiftId = null;
+}
+
+function confirmCancelShift() {
+  if (!_cancellingShiftId) return;
+  var shift = null;
+  for (var i = 0; i < plannedShifts.length; i++) {
+    if (plannedShifts[i].id === _cancellingShiftId) { shift = plannedShifts[i]; break; }
+  }
+  if (!shift) { closeCancelShiftModal(); return; }
+
+  var reason = document.getElementById('cancelShiftReason').value.trim();
+  postCancellationToDiscord(shift, reason);
+
+  plannedShifts = plannedShifts.filter(function(s){ return s.id !== _cancellingShiftId; });
+  if (_editingPlannedShiftId === _cancellingShiftId) {
+    _editingPlannedShiftId = null;
+    _resetPlannedShiftForm();
+  }
+  syncToFirebase();
+  renderPlannedShiftsList();
+  closeCancelShiftModal();
+  toast('Cancellation posted to Discord', 'red');
+}
+
+function postCancellationToDiscord(shift, reason) {
+  var ts = shift.unixTs;
+  var desc = 'We\'re sorry — our **' + shift.period + '** service on <t:' + ts + ':D> has been cancelled.';
+  if (reason) desc += '\n\n**' + reason + '**';
+  desc += '\n\nWe apologise for any inconvenience and hope to see you soon. 🙏';
+  if (shift.bookingLink) desc += '\n\nTo rebook: ' + shift.bookingLink;
+
+  var embed = {
+    color: 0xc8251c,
+    title: '❌ Service Cancelled — <t:' + ts + ':D>',
+    description: desc,
+    footer: { text: 'Red Chopstick · Horton' },
+    timestamp: new Date().toISOString()
+  };
+  postToDiscord(WEBHOOK_PUBLIC, '@here', [embed]);
+}
+
+function deletePlannedShift() {
+  // Silent delete from edit form — no public post
+  if (!_editingPlannedShiftId) return;
+  plannedShifts = plannedShifts.filter(function(s){ return s.id !== _editingPlannedShiftId; });
+  syncToFirebase();
+  renderPlannedShiftsList();
+  _editingPlannedShiftId = null;
+  _resetPlannedShiftForm();
+  toast('Shift removed');
+}
+
+function editPlannedShift(id) {
+  var shift = null;
+  for (var i = 0; i < plannedShifts.length; i++) {
+    if (plannedShifts[i].id === id) { shift = plannedShifts[i]; break; }
+  }
+  if (!shift) return;
+  _editingPlannedShiftId = id;
+  _resetPlannedShiftForm(); // resets staff checkboxes first
+
+  document.getElementById('psDate').value = shift.date;
+  document.getElementById('psPeriod').value = shift.period;
+  document.getElementById('psTime').value = shift.time || '17:30';
+  document.getElementById('psSpecials').value = shift.specials || '';
+  document.getElementById('psEvent').value = shift.event || '';
+  document.getElementById('psBookingLink').value = shift.bookingLink || '';
+  document.getElementById('psPostReminder').checked = shift.postReminder !== false;
+  document.getElementById('psPostNow').checked = false;
+  document.getElementById('psDeleteBtn').style.display = 'inline-flex';
+  document.getElementById('plannedShiftFormTitle').textContent = 'Edit Shift';
+
+  // Re-check supervisors
+  var cbs = document.querySelectorAll('#psStaffChecks input[type=checkbox]');
+  for (var i = 0; i < cbs.length; i++) {
+    if (shift.supervisors && shift.supervisors.indexOf(cbs[i].dataset.name) !== -1) {
+      cbs[i].checked = true;
+    }
+  }
+}
+
+function renderPlannedShiftsList() {
+  var container = document.getElementById('plannedShiftsList');
+  var now = Date.now();
+  // Sort by date, upcoming only (keep past 1 day for reference)
+  var sorted = plannedShifts.slice().sort(function(a, b){ return a.unixTs - b.unixTs; });
+  var upcoming = sorted.filter(function(s){ return s.unixTs * 1000 > now - 86400000; });
+
+  if (!upcoming.length) {
+    container.innerHTML = '<div style="color:var(--text3);font-style:italic;font-size:11px;padding:4px 0">No shifts scheduled yet.</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  upcoming.forEach(function(shift) {
+    var dateStr = new Date(shift.unixTs * 1000).toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'});
+    var timeStr = shift.time || '';
+    var isPast = shift.unixTs * 1000 < now;
+
+    var card = document.createElement('div');
+    card.style.cssText = 'background:var(--panel2);border:1px solid var(--border);border-radius:4px;padding:10px 12px;display:flex;align-items:center;gap:10px;opacity:'+(isPast?'0.5':'1');
+
+    var info = '<div style="flex:1;min-width:0">';
+    info += '<div style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)">' + dateStr + ' · ' + shift.period + (timeStr ? ' · ' + timeStr : '') + '</div>';
+    if (shift.specials) info += '<div style="font-size:11px;color:var(--gold2);margin-top:2px">✨ ' + shift.specials + '</div>';
+    if (shift.event)    info += '<div style="font-size:11px;color:var(--blue2);margin-top:1px">🎉 ' + shift.event + '</div>';
+    if (shift.supervisors && shift.supervisors.length) info += '<div style="font-size:10px;color:var(--text3);margin-top:2px">Floor: ' + shift.supervisors.join(', ') + '</div>';
+    info += '</div>';
+
+    card.innerHTML = info +
+      '<button onclick="postPlannedShiftToDiscord(plannedShifts.filter(function(s){return s.id===\''+shift.id+'\'})[0]);toast(\'Reposted to Discord\',\'green\')" style="padding:3px 8px;border-radius:3px;border:1px solid var(--blue);background:none;color:var(--blue2);font-size:10px;cursor:pointer;flex-shrink:0">Repost</button>' +
+      '<button onclick="cancelPlannedShift(\''+shift.id+'\')" style="padding:3px 8px;border-radius:3px;border:1px solid #922;background:none;color:#f07070;font-size:10px;cursor:pointer;flex-shrink:0">Cancel</button>' +
+      '<button onclick="editPlannedShift(\''+shift.id+'\')" style="padding:3px 8px;border-radius:3px;border:1px solid var(--border2);background:none;color:var(--text2);font-size:10px;cursor:pointer;flex-shrink:0">Edit</button>';
+
+    container.appendChild(card);
+  });
+}
+
+function _plannedShiftUnixTs(dateStr, timeStr) {
+  // dateStr = "YYYY-MM-DD", timeStr = "HH:MM"
+  var parts = dateStr.split('-');
+  var timeParts = (timeStr || '17:30').split(':');
+  var d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]),
+                   parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+  return Math.floor(d.getTime() / 1000);
+}
+
+function postPlannedShiftToDiscord(shift) {
+  if (!shift) return;
+  var ts = shift.unixTs;
+
+  var desc = 'We\'re open for **' + shift.period + '** from <t:' + ts + ':t> on <t:' + ts + ':D>';
+  if (shift.specials) desc += '\n\n✨ **Tonight\'s special:** ' + shift.specials;
+  if (shift.event)    desc += '\n\n🎉 ' + shift.event;
+  if (shift.supervisors && shift.supervisors.length) {
+    desc += '\n\n👤 **On the floor:** ' + shift.supervisors.join(' & ');
+  }
+  if (shift.bookingLink) desc += '\n\n📞 **Reserve your table:** ' + shift.bookingLink;
+
+  var embed = {
+    color: 0xc8251c,
+    title: '🥢 Red Chopstick — <t:' + ts + ':D>',
+    description: desc,
+    footer: { text: 'Red Chopstick · Horton' },
+    timestamp: new Date().toISOString()
+  };
+
+  postToDiscord(WEBHOOK_PUBLIC, "@here", [embed]);
+}
+
+// ── Morning-of reminder check — runs every 5 minutes
+setInterval(function() {
+  var now = new Date();
+  // Only fire between 08:00 and 09:00
+  if (now.getHours() !== 8) return;
+  var today = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  var changed = false;
+  for (var i = 0; i < plannedShifts.length; i++) {
+    var s = plannedShifts[i];
+    if (s.date === today && s.postReminder && !s.reminderFired) {
+      postPlannedShiftToDiscord(s);
+      plannedShifts[i].reminderFired = true;
+      changed = true;
+    }
+  }
+  if (changed) syncToFirebase();
+}, 5 * 60 * 1000);
 
 // ══════════════════════════════════════════════════
 // INIT
