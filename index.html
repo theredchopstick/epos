@@ -298,6 +298,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
   </div>
   <div class="topbar-right">
     <button onclick="openStaff()" style="padding:4px 10px;border-radius:3px;border:1px solid var(--border2);background:none;color:var(--text2);font-size:10px;font-family:var(--font);cursor:pointer;letter-spacing:.5px;text-transform:uppercase">Staff</button>
+    <button onclick="showWhoOverlay()" style="padding:4px 10px;border-radius:3px;border:1px solid var(--gold);background:none;font-size:10px;font-family:var(--font);cursor:pointer;letter-spacing:.5px;text-transform:uppercase;color:var(--gold2)" title="Switch user"><span id="currentUserLabel">Sign In</span></button>
     <button onclick="open86()" style="padding:4px 10px;border-radius:3px;border:1px solid var(--red);background:none;color:#f07070;font-size:10px;font-family:var(--font);cursor:pointer;letter-spacing:.5px;text-transform:uppercase" id="e86TopBtn">86 Board</button>
     <button onclick="openShift()" id="shiftBtn" style="padding:4px 10px;border-radius:3px;border:1px solid var(--green);background:none;color:var(--green2);font-size:10px;font-family:var(--font);cursor:pointer;letter-spacing:.5px;text-transform:uppercase">Open Shift</button>
     <div id="syncDot" class="status-dot" style="background:#888;box-shadow:none"></div><span id="syncLabel" style="font-size:10px;color:var(--text3);letter-spacing:.5px">Connecting...</span>
@@ -671,6 +672,20 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
     </div>
   </div>
 </div>
+<!-- WHO ARE YOU MODAL -->
+<div class="overlay" id="whoOverlay" style="display:none">
+  <div class="modal" style="width:340px">
+    <div class="modal-header"><span class="modal-title">Who are you?</span></div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Select your name to continue. This lets the system track which orders belong to you.</div>
+      <div id="whoStaffBtns" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" style="width:100%;font-size:11px" onclick="setCurrentUser('Manager')">Manager / Override</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="staffOverlay" style="display:none" onclick="if(event.target===this)closeStaff()">
   <div class="modal" style="width:380px">
     <div class="modal-header"><span class="modal-title">Manage Staff</span><button class="modal-close" onclick="closeStaff()">X</button></div>
@@ -719,7 +734,11 @@ function syncToFirebase() {
         staff: staff,
         kitchenDoneItems: kitchenDoneItems,
         orderCounter: orderCounter,
-        resCounter: resCounter
+        resCounter: resCounter,
+        shiftState: shiftState,
+        shiftRecords: shiftRecords,
+        tillHistory: tillHistory,
+        fpLayout: fpLayout
       };
       window._fbSet(window._fbRef(window._db, 'epos'), JSON.parse(JSON.stringify(payload)));
     } catch(e) {
@@ -743,7 +762,7 @@ function initFirebaseSync() {
       return;
     }
       // Merge remote state — remote wins for most things
-      if (data.tableOrders) tableOrders = data.tableOrders;
+      if (data.tableOrders) tableOrders = sanitiseOrders(data.tableOrders);
       if (data.completedOrders) completedOrders = data.completedOrders;
       if (data.voidLog) voidLog = data.voidLog;
       if (data.tipLog) tipLog = data.tipLog;
@@ -936,6 +955,7 @@ var TABLES = [
 
 // ══ STATE ══
 var currentTable='G1',currentCat='Starters',serviceOn=true,svcOverride=null,selectedPayMethod='cash',orderFilter='all';
+var currentUser = null; // set on load via who-are-you prompt
 var tableOrders={},completedOrders=[],voidLog=[],tipLog=[],orderCounter=1;
 var pendingVoid=null,splitSeats=[],mergeTargets=[],transferTarget=null,transferSelectedItems=[];
 var eightySixItems={},reservations=[],resCounter=1,editingResId=null;
@@ -943,7 +963,95 @@ var staff = [];
 var _staffDefaulted = false;
 var kitchenDoneItems={};
 
-function getOrder(id){if(!tableOrders[id])tableOrders[id]={items:[],covers:1,guestName:'',waiter:'',openedAt:null,status:'open',ref:orderCounter++,discount:null};return tableOrders[id];}
+
+// ══════════════════════════════════════════════════
+// CURRENT USER & GUARDS
+// ══════════════════════════════════════════════════
+
+function showWhoOverlay() {
+  var overlay = document.getElementById('whoOverlay');
+  var btns = document.getElementById('whoStaffBtns');
+  btns.innerHTML = '';
+  if (!staff.length) {
+    // No staff set up yet — just let them in as Manager
+    setCurrentUser('Manager');
+    return;
+  }
+  for (var i=0;i<staff.length;i++) {
+    (function(name){
+      var btn = document.createElement('button');
+      btn.className = 'btn btn-ghost';
+      btn.style.cssText = 'width:100%;text-align:left;font-size:13px;padding:10px 14px;justify-content:flex-start';
+      btn.textContent = name;
+      btn.onclick = function(){ setCurrentUser(name); };
+      btns.appendChild(btn);
+    })(staff[i]);
+  }
+  overlay.style.display = 'flex';
+}
+
+function setCurrentUser(name) {
+  currentUser = name;
+  document.getElementById('whoOverlay').style.display = 'none';
+  // Update topbar to show who's logged in
+  var userLabel = document.getElementById('currentUserLabel');
+  if (userLabel) userLabel.textContent = name;
+  toast('Signed in as ' + name, 'green');
+}
+
+function isManager() {
+  return !currentUser || currentUser === 'Manager';
+}
+
+function tableWaiter() {
+  var o = tableOrders[currentTable];
+  return o ? (o.waiter || null) : null;
+}
+
+function guardTable(action) {
+  // Returns true if the current user is allowed to perform action on this table
+  // action: 'add' | 'kitchen' | 'pay' | 'waiter'
+  if (isManager()) return true;
+  var o = tableOrders[currentTable];
+  if (!o || !o.items || !o.items.length) return true; // empty table — anyone can start it
+  var assigned = o.waiter;
+  if (!assigned) return true; // no waiter assigned yet — anyone can work it
+  if (assigned === currentUser) return true; // it's yours
+  // Someone else's table — show appropriate message
+  var tLabel = '';
+  for (var i=0;i<TABLES.length;i++){if(TABLES[i].id===currentTable){tLabel=TABLES[i].label;break;}}
+  var messages = {
+    'add':     assigned + ' is already taking ' + tLabel + '. Add items anyway?',
+    'kitchen': assigned + ' is assigned to ' + tLabel + '. Send to kitchen anyway?',
+    'pay':     assigned + ' is assigned to ' + tLabel + '. Process payment anyway?',
+    'waiter':  tLabel + ' is assigned to ' + assigned + '. Reassign to yourself?'
+  };
+  return confirm(messages[action] || (assigned + ' is assigned to ' + tLabel + '. Continue anyway?'));
+}
+
+function warnNoUser() {
+  if (!currentUser) {
+    toast('Please sign in first — tap the topbar name button', 'red');
+    return true;
+  }
+  return false;
+}
+
+function sanitiseOrders(orders) {
+  // Firebase drops empty arrays — ensure every table order has items:[]
+  if (!orders) return {};
+  var keys = Object.keys(orders);
+  for (var i=0;i<keys.length;i++) {
+    var o = orders[keys[i]];
+    if (!o) { orders[keys[i]] = {items:[],covers:1,guestName:'',waiter:'',openedAt:null,status:'open',ref:0,discount:null}; continue; }
+    if (!o.items || !Array.isArray(o.items)) o.items = [];
+    for (var j=0;j<o.items.length;j++) {
+      if (!o.items[j]) { o.items.splice(j,1); j--; continue; }
+    }
+  }
+  return orders;
+}
+function getOrder(id){if(!tableOrders[id])tableOrders[id]={items:[],covers:1,guestName:'',waiter:'',openedAt:null,status:'open',ref:orderCounter++,discount:null};var o=tableOrders[id];if(!o.items||!Array.isArray(o.items))o.items=[];return o;}
 
 // ══ CLOCK ══
 function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});updateTimerBadge();var ke=document.getElementById('kdsClock');if(ke)ke.textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
@@ -952,7 +1060,7 @@ setInterval(tick,1000);tick();setInterval(buildTableGrid,30000);
 function seatedMinutes(o){if(!o||!o.openedAt)return null;return Math.floor((Date.now()-new Date(o.openedAt).getTime())/60000);}
 function timerDisplay(m){if(m===null)return'';var h=Math.floor(m/60),mn=m%60;return h>0?(h+'h '+mn+'m'):(mn+'m');}
 function timerClass(m){if(m===null)return'';if(m<60)return'timer-ok';if(m<90)return'timer-warn';return'timer-late';}
-function updateTimerBadge(){var o=tableOrders[currentTable],badge=document.getElementById('opTimerBadge');if(!o||!o.openedAt||!o.items.length){badge.textContent='';badge.style.cssText='';return;}var m=seatedMinutes(o),cls=timerClass(m);badge.textContent='Timer: '+timerDisplay(m);if(cls==='timer-ok'){badge.style.background='rgba(46,125,82,.2)';badge.style.color='var(--green2)';}else if(cls==='timer-warn'){badge.style.background='rgba(183,119,13,.2)';badge.style.color='var(--amber2)';}else{badge.style.background='rgba(200,37,28,.2)';badge.style.color='#e05555';}badge.style.borderRadius='3px';badge.style.padding='2px 6px';}
+function updateTimerBadge(){var o=tableOrders[currentTable],badge=document.getElementById('opTimerBadge');if(!o||!o.openedAt||!o.items||!o.items.length){badge.textContent='';badge.style.cssText='';return;}var m=seatedMinutes(o),cls=timerClass(m);badge.textContent='Timer: '+timerDisplay(m);if(cls==='timer-ok'){badge.style.background='rgba(46,125,82,.2)';badge.style.color='var(--green2)';}else if(cls==='timer-warn'){badge.style.background='rgba(183,119,13,.2)';badge.style.color='var(--amber2)';}else{badge.style.background='rgba(200,37,28,.2)';badge.style.color='#e05555';}badge.style.borderRadius='3px';badge.style.padding='2px 6px';}
 
 // ══ VIEWS ══
 function switchView(v,el){var vs=document.querySelectorAll('.view');for(var i=0;i<vs.length;i++)vs[i].classList.remove('active');var ts=document.querySelectorAll('.topbar-tab');for(var i=0;i<ts.length;i++)ts[i].classList.remove('active');var ve=document.getElementById('view'+v.charAt(0).toUpperCase()+v.slice(1));if(ve)ve.classList.add('active');if(el)el.classList.add('active');if(v==='orders')renderOrders();if(v==='eod')renderEod();if(v==='reservations')renderReservations();if(v==='floorplan')renderFloorPlan();if(v==='kitchen')renderKitchen();}
@@ -966,12 +1074,12 @@ function filterItems(){renderMenu(document.getElementById('searchInput').value.t
 function renderMenu(filter){var g=document.getElementById('menuGrid');g.innerHTML='';var items;if(filter){items=[];var cats=Object.keys(MENU);for(var c=0;c<cats.length;c++){var cat=MENU[cats[c]];for(var j=0;j<cat.length;j++){if(cat[j].name.toLowerCase().indexOf(filter)!==-1||(cat[j].sub||'').toLowerCase().indexOf(filter)!==-1)items.push(cat[j]);}}}else items=MENU[currentCat]||[];for(var i=0;i<items.length;i++){(function(item){var un=eightySixItems[item.name]===true,d=document.createElement('div');d.className='item-card';if(un){d.style.opacity='0.4';d.style.cursor='not-allowed';}var h='<div class="ic-name">'+item.name+(un?' <span class="unavail-badge">86\'d</span>':'')+'</div>';if(item.sub)h+='<div class="ic-sub">'+item.sub+'</div>';h+='<div class="ic-footer"><span class="ic-price">$'+item.price.toFixed(2)+'</span><div class="ic-badges">';if(item.v)h+='<span class="badge badge-v">V</span>';if(item.s)h+='<span class="badge badge-s">Hot</span>';if(item.alc)h+='<span class="badge badge-alc">ABV</span>';h+='</div></div>';d.innerHTML=h;if(!un)d.onclick=function(){addItem(item);};g.appendChild(d);})(items[i]);}if(!items.length)g.innerHTML='<div style="color:var(--text3);font-style:italic;padding:12px;font-size:12px">No items found</div>';}
 
 // ══ ORDER MANAGEMENT ══
-function addItem(item){var o=getOrder(currentTable);if(!o.openedAt){o.openedAt=new Date().toISOString();var td=null;for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===currentTable){td=TABLES[i];break;}}if(td&&td.seats&&o.covers===1)o.covers=Math.min(td.seats,9);}var ex=null;for(var i=0;i<o.items.length;i++){if(o.items[i].name===item.name&&!o.items[i].note&&!o.items[i].sent){ex=o.items[i];break;}}if(ex)ex.qty++;else o.items.push({name:item.name,price:item.price,qty:1,note:'',sent:false,voided:false});syncToFirebase();buildTableGrid();renderOrderPanel();toast(item.name+' added');}
+function addItem(item){if(warnNoUser())return;if(!guardTable('add'))return;var o=getOrder(currentTable);if(!o.openedAt){o.openedAt=new Date().toISOString();var td=null;for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===currentTable){td=TABLES[i];break;}}if(td&&td.seats&&o.covers===1)o.covers=Math.min(td.seats,9);}var ex=null;for(var i=0;i<o.items.length;i++){if(o.items[i].name===item.name&&!o.items[i].note&&!o.items[i].sent){ex=o.items[i];break;}}if(ex)ex.qty++;else o.items.push({name:item.name,price:item.price,qty:1,note:'',sent:false,voided:false});syncToFirebase();buildTableGrid();renderOrderPanel();toast(item.name+' added');}
 function changeQty(idx,delta){var o=getOrder(currentTable);if(delta<0&&o.items[idx].sent){initiateVoid(currentTable,idx);return;}o.items[idx].qty+=delta;if(o.items[idx].qty<=0){if(!o.items[idx].sent)o.items.splice(idx,1);else{initiateVoid(currentTable,idx);return;}}syncToFirebase();buildTableGrid();renderOrderPanel();}
 function removeItemDirect(idx){var o=getOrder(currentTable);if(o.items[idx].sent){initiateVoid(currentTable,idx);return;}o.items.splice(idx,1);syncToFirebase();buildTableGrid();renderOrderPanel();}
 function updateNote(idx,val){getOrder(currentTable).items[idx].note=val;syncToFirebase();}
 function updateGuestName(){getOrder(currentTable).guestName=document.getElementById('guestNameInput').value;syncToFirebase();buildTableGrid();}
-function updateWaiter(){getOrder(currentTable).waiter=document.getElementById('waiterSelect').value;syncToFirebase();buildTableGrid();}
+function updateWaiter(){if(!guardTable('waiter'))return;getOrder(currentTable).waiter=document.getElementById('waiterSelect').value;syncToFirebase();buildTableGrid();}
 function setCovers(n){getOrder(currentTable).covers=n;syncToFirebase();buildCoversRow();calcTotals();}
 function buildCoversRow(){var o=getOrder(currentTable),row=document.getElementById('coversRow');row.innerHTML='';for(var n=1;n<=9;n++){(function(num){var b=document.createElement('button');b.className='cov-btn'+(o.covers===num?' active':'');b.textContent=num;b.onclick=function(){setCovers(num);};row.appendChild(b);})(n);}}
 function rebuildWaiterSelects(){var sel=document.getElementById('waiterSelect');if(!sel)return;var cur=sel.value;sel.innerHTML='<option value="">- Assign -</option>';for(var i=0;i<staff.length;i++)sel.innerHTML+='<option value="'+staff[i]+'"'+(staff[i]===cur?' selected':'')+'>'+staff[i]+'</option>';}
@@ -994,10 +1102,10 @@ function checkVoidReason(){var v=document.getElementById('voidReasonSelect').val
 function cancelVoid(){pendingVoid=null;document.getElementById('voidOverlay').style.display='none';}
 function confirmVoid(){if(!pendingVoid)return;var tid=pendingVoid.tableId,idx=pendingVoid.idx,o=getOrder(tid),item=o.items[idx],reason=document.getElementById('voidReasonSelect').value,note=document.getElementById('voidNoteInput').value,tl='';for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===tid){tl=TABLES[i].label;break;}}voidLog.push({time:new Date().toISOString(),table:tl,tableId:tid,item:item.name,qty:item.qty,price:item.price*item.qty,reason:reason+(note?' - '+note:'')});item.voided=true;pendingVoid=null;document.getElementById('voidOverlay').style.display='none';syncToFirebase();buildTableGrid();renderOrderPanel();toast('Void logged: '+item.name,'red');}
 
-function sendKitchen(){var o=getOrder(currentTable),fresh=o.items.filter(function(i){return !i.sent&&!i.voided;});if(!fresh.length){toast('No new items to send','red');return;}for(var i=0;i<fresh.length;i++)fresh[i].sent=true;o.status='kitchen';syncToFirebase();updateOrderCount();buildTableGrid();renderOrderPanel();toast(fresh.length+' item(s) sent to kitchen','green');}
+function sendKitchen(){if(warnNoUser())return;if(!guardTable('kitchen'))return;var o=getOrder(currentTable),fresh=o.items.filter(function(i){return !i.sent&&!i.voided;});if(!fresh.length){toast('No new items to send','red');return;}for(var i=0;i<fresh.length;i++)fresh[i].sent=true;o.status='kitchen';syncToFirebase();updateOrderCount();buildTableGrid();renderOrderPanel();toast(fresh.length+' item(s) sent to kitchen','green');}
 function clearOrder(){if(!getOrder(currentTable).items.length)return;if(!confirm('Clear this order?'))return;var cov=tableOrders[currentTable]?tableOrders[currentTable].covers:1;tableOrders[currentTable]={items:[],covers:cov,guestName:'',waiter:'',openedAt:null,status:'open',ref:orderCounter++,discount:null};syncToFirebase();buildTableGrid();renderOrderPanel();toast('Order cleared');}
 
-function openPay(){var o=getOrder(currentTable),ai=o.items?o.items.filter(function(i){return !i.voided;}):[];if(!ai.length){toast('No items on this order','red');return;}var sub=ai.reduce(function(s,i){return s+i.price*i.qty;},0),covers=o.covers||1,big=covers>=6,rate=(svcOverride!==null)?svcOverride/100:(big?0.18:0.20),d=o.discount,da=0;if(d){if(d.type==='percent')da=sub*(d.amount/100);else if(d.type==='fixed')da=Math.min(d.amount,sub);else if(d.type==='comp')da=sub;}var ad=Math.max(0,sub-da),svc=serviceOn?ad*rate:0,tax=ad*0.055,grand=ad+svc+tax;var pn=document.getElementById('partyNotice');if(big){pn.style.display='block';pn.textContent='Party of '+covers+' - 18% gratuity applied.';}else pn.style.display='none';var html='';for(var i=0;i<ai.length;i++)html+='<div class="receipt-line"><span>'+ai[i].qty+'x '+ai[i].name+(ai[i].note?' ('+ai[i].note+')':'')+'</span><span>$'+(ai[i].price*ai[i].qty).toFixed(2)+'</span></div>';html+='<div class="receipt-line muted"><span>Subtotal</span><span>$'+sub.toFixed(2)+'</span></div>';if(d&&da>0)html+='<div class="receipt-line discount"><span>Discount ('+d.reason+')</span><span>-$'+da.toFixed(2)+'</span></div>';if(serviceOn)html+='<div class="receipt-line muted"><span>Service ('+(big?'18':'20')+'%)</span><span>$'+svc.toFixed(2)+'</span></div>';html+='<div class="receipt-line muted"><span>Tax (5.5% WI)</span><span>$'+tax.toFixed(2)+'</span></div>';html+='<div class="receipt-line total"><span>Total Due</span><span>$'+grand.toFixed(2)+'</span></div>';document.getElementById('receiptContent').innerHTML=html;var tl='';for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===currentTable){tl=TABLES[i].label;break;}}document.getElementById('payModalTitle').textContent='Payment - '+(o.guestName?o.guestName+' / ':'')+tl;splitSeats=[{name:'Seat 1',items:[]}];renderSplitSeats();document.getElementById('splitPanel').style.display='none';var pbs=document.querySelectorAll('.pay-btn');for(var i=0;i<pbs.length;i++)pbs[i].classList.remove('sel');pbs[0].classList.add('sel');selectedPayMethod='cash';document.getElementById('tipInput').value='';document.getElementById('tipPreview').textContent='';document.getElementById('payOverlay').style.display='flex';}
+function openPay(){if(warnNoUser())return;if(!guardTable('pay'))return;var o=getOrder(currentTable),ai=o.items?o.items.filter(function(i){return !i.voided;}):[];if(!ai.length){toast('No items on this order','red');return;}var sub=ai.reduce(function(s,i){return s+i.price*i.qty;},0),covers=o.covers||1,big=covers>=6,rate=(svcOverride!==null)?svcOverride/100:(big?0.18:0.20),d=o.discount,da=0;if(d){if(d.type==='percent')da=sub*(d.amount/100);else if(d.type==='fixed')da=Math.min(d.amount,sub);else if(d.type==='comp')da=sub;}var ad=Math.max(0,sub-da),svc=serviceOn?ad*rate:0,tax=ad*0.055,grand=ad+svc+tax;var pn=document.getElementById('partyNotice');if(big){pn.style.display='block';pn.textContent='Party of '+covers+' - 18% gratuity applied.';}else pn.style.display='none';var html='';for(var i=0;i<ai.length;i++)html+='<div class="receipt-line"><span>'+ai[i].qty+'x '+ai[i].name+(ai[i].note?' ('+ai[i].note+')':'')+'</span><span>$'+(ai[i].price*ai[i].qty).toFixed(2)+'</span></div>';html+='<div class="receipt-line muted"><span>Subtotal</span><span>$'+sub.toFixed(2)+'</span></div>';if(d&&da>0)html+='<div class="receipt-line discount"><span>Discount ('+d.reason+')</span><span>-$'+da.toFixed(2)+'</span></div>';if(serviceOn)html+='<div class="receipt-line muted"><span>Service ('+(big?'18':'20')+'%)</span><span>$'+svc.toFixed(2)+'</span></div>';html+='<div class="receipt-line muted"><span>Tax (5.5% WI)</span><span>$'+tax.toFixed(2)+'</span></div>';html+='<div class="receipt-line total"><span>Total Due</span><span>$'+grand.toFixed(2)+'</span></div>';document.getElementById('receiptContent').innerHTML=html;var tl='';for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===currentTable){tl=TABLES[i].label;break;}}document.getElementById('payModalTitle').textContent='Payment - '+(o.guestName?o.guestName+' / ':'')+tl;splitSeats=[{name:'Seat 1',items:[]}];renderSplitSeats();document.getElementById('splitPanel').style.display='none';var pbs=document.querySelectorAll('.pay-btn');for(var i=0;i<pbs.length;i++)pbs[i].classList.remove('sel');pbs[0].classList.add('sel');selectedPayMethod='cash';document.getElementById('tipInput').value='';document.getElementById('tipPreview').textContent='';document.getElementById('payOverlay').style.display='flex';}
 function closePay(){document.getElementById('payOverlay').style.display='none';}
 function selPay(el,method){selectedPayMethod=method;var pbs=document.querySelectorAll('.pay-btn');for(var i=0;i<pbs.length;i++)pbs[i].classList.remove('sel');el.classList.add('sel');document.getElementById('splitPanel').style.display=method==='split'?'block':'none';if(method==='split')renderSplitSeats();}
 function updateTipPreview(){var v=parseFloat(document.getElementById('tipInput').value)||0;document.getElementById('tipPreview').textContent=v>0?('$'+v.toFixed(2)+' tip'):'';}
@@ -1040,8 +1148,28 @@ function saveReservation(){var name=document.getElementById('resNameInput').valu
 function openStaff(){renderStaffList();document.getElementById('staffOverlay').style.display='flex';setTimeout(function(){document.getElementById('newStaffName').focus();},100);}
 function closeStaff(){document.getElementById('staffOverlay').style.display='none';rebuildWaiterSelects();}
 function renderStaffList(){var c=document.getElementById('staffList');c.innerHTML='';if(!staff.length){c.innerHTML='<div style="color:var(--text3);font-style:italic;font-size:11px">No staff added</div>';return;}for(var i=0;i<staff.length;i++){(function(name,idx){var row=document.createElement('div');row.className='staff-row';row.innerHTML='<span class="staff-name">'+name+'</span><button class="staff-del" onclick="removeStaff('+idx+')">Remove</button>';c.appendChild(row);})(staff[i],i);}}
-function addStaff(){var name=document.getElementById('newStaffName').value.trim();if(!name)return;staff.push(name);document.getElementById('newStaffName').value='';syncToFirebase();renderStaffList();rebuildWaiterSelects();toast(name+' added to staff');}
-function removeStaff(idx){staff.splice(idx,1);syncToFirebase();renderStaffList();rebuildWaiterSelects();}
+function addStaff(){
+  var name=document.getElementById('newStaffName').value.trim();
+  if(!name)return;
+  staff.push(name);
+  document.getElementById('newStaffName').value='';
+  syncStaffNow();
+  renderStaffList();rebuildWaiterSelects();
+  toast(name+' added to staff');
+}
+function removeStaff(idx){
+  staff.splice(idx,1);
+  syncStaffNow();
+  renderStaffList();rebuildWaiterSelects();
+}
+function syncStaffNow(){
+  // Immediate write — no debounce — so staff changes always land
+  if(!_syncEnabled||!window._db)return;
+  try{
+    var payload={tableOrders:tableOrders,completedOrders:completedOrders,voidLog:voidLog,tipLog:tipLog,reservations:reservations,eightySixItems:eightySixItems,staff:staff,kitchenDoneItems:kitchenDoneItems,orderCounter:orderCounter,resCounter:resCounter,shiftState:shiftState,shiftRecords:shiftRecords,tillHistory:tillHistory,fpLayout:fpLayout};
+    window._fbSet(window._fbRef(window._db,'epos'),JSON.parse(JSON.stringify(payload)));
+  }catch(e){console.warn('Staff sync error:',e);}
+}
 
 function renderFloorPlan(){var c=document.getElementById('floorPlanContainer');c.innerHTML='';var floors=['Ground','Top','Other'],fl={Ground:'Ground Floor',Top:'Top Floor',Other:'Other'};for(var fi=0;fi<floors.length;fi++){var floor=floors[fi],ft=TABLES.filter(function(t){return t.floor===floor;});if(!ft.length)continue;var sec=document.createElement('div');sec.className='floor-section';sec.innerHTML='<div class="floor-label">'+fl[floor]+'</div>';var tr=document.createElement('div');tr.className='floor-tables';for(var ti=0;ti<ft.length;ti++){(function(t){var o=tableOrders[t.id],hi=o&&o.items&&o.items.filter(function(i){return !i.voided;}).length>0,tot=hi?o.items.filter(function(i){return !i.voided;}).reduce(function(s,i){return s+i.price*i.qty;},0):0,m=hi?seatedMinutes(o):null,status='fp-free';if(hi){if(m!==null&&m>=90)status='fp-late';else if(o.status==='kitchen')status='fp-kitchen';else status='fp-occupied';}var tc=m!==null?timerClass(m):'',div=document.createElement('div');div.className='fp-table '+status+(t.wide?' fp-wide':'');var h='<div class="fp-num">'+t.label+'</div>';if(t.seats)h+='<div class="fp-seats">'+t.seats+' seats</div>';if(o&&o.guestName)h+='<div class="fp-guest">'+o.guestName+'</div>';if(o&&o.waiter)h+='<div class="fp-waiter">'+o.waiter+'</div>';if(hi)h+='<div class="fp-total">$'+tot.toFixed(2)+'</div>';if(m!==null)h+='<div class="fp-timer '+tc+'">'+timerDisplay(m)+'</div>';div.innerHTML=h;div.onclick=function(){currentTable=t.id;var vs=document.querySelectorAll('.view');for(var i=0;i<vs.length;i++)vs[i].classList.remove('active');var ts=document.querySelectorAll('.topbar-tab');for(var i=0;i<ts.length;i++)ts[i].classList.remove('active');document.getElementById('viewPos').classList.add('active');ts[0].classList.add('active');buildTableGrid();renderOrderPanel();};tr.appendChild(div);})(ft[ti]);}sec.appendChild(tr);c.appendChild(sec);}}
 
@@ -1604,35 +1732,6 @@ sendKitchen = function() {
 // ══════════════════════════════════════════════════
 // PERSIST SHIFT STATE + RECORDS IN FIREBASE
 // ══════════════════════════════════════════════════
-var _origSyncToFirebase = syncToFirebase;
-syncToFirebase = function() {
-  _origSyncToFirebase();
-  // Also save shift state and records
-  if (!_syncEnabled) return;
-  clearTimeout(_syncTimeout);
-  _syncTimeout = setTimeout(function() {
-    try {
-      var payload = {
-        tableOrders: tableOrders,
-        completedOrders: completedOrders,
-        voidLog: voidLog,
-        tipLog: tipLog,
-        reservations: reservations,
-        eightySixItems: eightySixItems,
-        staff: staff,
-        kitchenDoneItems: kitchenDoneItems,
-        orderCounter: orderCounter,
-        resCounter: resCounter,
-        shiftState: shiftState,
-        shiftRecords: shiftRecords,
-        tillHistory: tillHistory,
-        fpLayout: fpLayout
-      };
-      window._fbSet(window._fbRef(window._db, 'epos'), JSON.parse(JSON.stringify(payload)));
-    } catch(e) { console.warn('Firebase sync error:', e); }
-  }, 400);
-};
-
 // Restore shift state from Firebase on load
 var _origInitFirebaseSync = initFirebaseSync;
 initFirebaseSync = function() {
@@ -1642,7 +1741,7 @@ initFirebaseSync = function() {
     window._fbOnValue(dbRef, function(snapshot) {
       var data = snapshot.val();
       if (!data) return;
-      if (data.tableOrders) tableOrders = data.tableOrders;
+      if (data.tableOrders) tableOrders = sanitiseOrders(data.tableOrders);
       if (data.completedOrders) completedOrders = data.completedOrders;
       if (data.voidLog) voidLog = data.voidLog;
       if (data.tipLog) tipLog = data.tipLog;
@@ -1682,6 +1781,8 @@ initFirebaseSync = function() {
         if (id==='viewKitchen') renderKitchen();
       }
       showSyncStatus('synced');
+      // Prompt sign-in once staff list is loaded
+      if (!currentUser) showWhoOverlay();
     });
     showSyncStatus('connected');
   });
