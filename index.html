@@ -3075,6 +3075,7 @@ function renderPlannedShiftsList() {
     info += '</div>';
 
     card.innerHTML = info +
+      '<button onclick="postUpdateToDiscord(plannedShifts.filter(function(s){return s.id===\''+shift.id+'\'})[0])" style="padding:3px 8px;border-radius:3px;border:1px solid var(--amber);background:none;color:var(--amber2);font-size:10px;cursor:pointer;flex-shrink:0">Update</button>' +
       '<button onclick="postPlannedShiftToDiscord(plannedShifts.filter(function(s){return s.id===\''+shift.id+'\'})[0]);toast(\'Reposted to Discord\',\'green\')" style="padding:3px 8px;border-radius:3px;border:1px solid var(--blue);background:none;color:var(--blue2);font-size:10px;cursor:pointer;flex-shrink:0">Repost</button>' +
       '<button onclick="cancelPlannedShift(\''+shift.id+'\')" style="padding:3px 8px;border-radius:3px;border:1px solid #922;background:none;color:#f07070;font-size:10px;cursor:pointer;flex-shrink:0">Cancel</button>' +
       '<button onclick="editPlannedShift(\''+shift.id+'\')" style="padding:3px 8px;border-radius:3px;border:1px solid var(--border2);background:none;color:var(--text2);font-size:10px;cursor:pointer;flex-shrink:0">Edit</button>';
@@ -3113,6 +3114,30 @@ function postPlannedShiftToDiscord(shift) {
   };
 
   postToDiscord(WEBHOOK_PUBLIC, "@here", [embed]);
+}
+
+function postUpdateToDiscord(shift) {
+  if (!shift) return;
+  var ts = shift.unixTs;
+
+  var desc = 'We\'re open for **' + shift.period + '** from <t:' + ts + ':t> on <t:' + ts + ':D>';
+  if (shift.specials) desc += '\n\n✨ **Tonight\'s special:** ' + shift.specials;
+  if (shift.event)    desc += '\n\n🎉 ' + shift.event;
+  if (shift.supervisors && shift.supervisors.length) {
+    desc += '\n\n👤 **On the floor:** ' + shift.supervisors.join(' & ');
+  }
+  if (shift.bookingLink) desc += '\n\n📞 **Reserve your table:** ' + shift.bookingLink;
+
+  var embed = {
+    color: 0xc9973a,
+    title: '📝 Updated — <t:' + ts + ':D>',
+    description: desc,
+    footer: { text: 'Red Chopstick · Horton' },
+    timestamp: new Date().toISOString()
+  };
+
+  postToDiscord(WEBHOOK_PUBLIC, null, [embed]);
+  toast('Update posted to Discord', 'green');
 }
 
 // ── Morning-of reminder check — runs every 5 minutes
