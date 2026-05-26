@@ -734,7 +734,14 @@ function initFirebaseSync() {
     var dbRef = window._fbRef(window._db, 'epos');
     window._fbOnValue(dbRef, function(snapshot) {
       var data = snapshot.val();
-      if (!data) { console.log('Firebase: no data yet, starting fresh'); return; }
+      if (!data) {
+      console.log('Firebase: no data yet, starting fresh');
+      // Write initial staff list to Firebase so it persists from first use
+      if (staff.length === 0) staff = [];
+      syncToFirebase();
+      _staffDefaulted = true;
+      return;
+    }
       // Merge remote state — remote wins for most things
       if (data.tableOrders) tableOrders = data.tableOrders;
       if (data.completedOrders) completedOrders = data.completedOrders;
@@ -742,7 +749,7 @@ function initFirebaseSync() {
       if (data.tipLog) tipLog = data.tipLog;
       if (data.reservations) reservations = data.reservations;
       if (data.eightySixItems) eightySixItems = data.eightySixItems;
-      if (data.staff) staff = data.staff;
+      if (data.staff && data.staff.length) { staff = data.staff; _staffDefaulted = true; } else if (!_staffDefaulted) { _staffDefaulted = true; }
       if (data.kitchenDoneItems) kitchenDoneItems = data.kitchenDoneItems;
       if (data.orderCounter && data.orderCounter > orderCounter) orderCounter = data.orderCounter;
       if (data.resCounter && data.resCounter > resCounter) resCounter = data.resCounter;
@@ -932,7 +939,8 @@ var currentTable='G1',currentCat='Starters',serviceOn=true,svcOverride=null,sele
 var tableOrders={},completedOrders=[],voidLog=[],tipLog=[],orderCounter=1;
 var pendingVoid=null,splitSeats=[],mergeTargets=[],transferTarget=null,transferSelectedItems=[];
 var eightySixItems={},reservations=[],resCounter=1,editingResId=null;
-var staff=['Sarah','James','Mei','Tom'];
+var staff = [];
+var _staffDefaulted = false;
 var kitchenDoneItems={};
 
 function getOrder(id){if(!tableOrders[id])tableOrders[id]={items:[],covers:1,guestName:'',waiter:'',openedAt:null,status:'open',ref:orderCounter++,discount:null};return tableOrders[id];}
@@ -1640,7 +1648,7 @@ initFirebaseSync = function() {
       if (data.tipLog) tipLog = data.tipLog;
       if (data.reservations) reservations = data.reservations;
       if (data.eightySixItems) eightySixItems = data.eightySixItems;
-      if (data.staff) staff = data.staff;
+      if (data.staff && data.staff.length) { staff = data.staff; _staffDefaulted = true; } else if (!_staffDefaulted) { _staffDefaulted = true; }
       if (data.kitchenDoneItems) kitchenDoneItems = data.kitchenDoneItems;
       if (data.orderCounter && data.orderCounter > orderCounter) orderCounter = data.orderCounter;
       if (data.resCounter && data.resCounter > resCounter) resCounter = data.resCounter;
