@@ -325,9 +325,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .confirm-body{padding:16px 18px;font-size:13px;color:var(--text2);line-height:1.5}
 .confirm-ftr{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--panel2)}
 
-/* ── OFFLINE BANNER ── */
-.offline-banner{position:fixed;top:48px;left:0;right:0;height:32px;background:rgba(200,37,28,.9);display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;font-weight:600;color:white;z-index:950;letter-spacing:.5px;text-transform:uppercase;transform:translateY(-40px);transition:transform .3s}
-.offline-banner.visible{transform:translateY(0)}
 
 /* ── KITCHEN BUSY INDICATOR ── */
 .fp-kitchen-busy{font-size:10px;padding:2px 8px;border-radius:3px;font-weight:500}
@@ -387,9 +384,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
   </div>
 </div>
 <div class="toast" id="toast"></div>
-
-<!-- OFFLINE BANNER -->
-<div class="offline-banner" id="offlineBanner">⚠ Firebase offline — changes may not save. Reconnecting…</div>
 
 <!-- CUSTOM CONFIRM MODAL -->
 <div class="confirm-overlay" id="confirmOverlay" style="display:none">
@@ -463,9 +457,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
       <div class="np-btn" onclick="elevDigit('1')">1</div><div class="np-btn" onclick="elevDigit('2')">2</div><div class="np-btn" onclick="elevDigit('3')">3</div>
       <div class="np-btn np-0" onclick="elevDigit('0')">0</div><div class="np-btn np-back" onclick="elevBack()">⌫</div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-top:1px solid var(--border)">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);border-top:1px solid var(--border)">
       <div class="np-btn np-cancel" onclick="elevCancel()">Cancel</div>
-      <div class="np-btn" style="background:var(--panel2);color:var(--text3);font-size:11px" onclick="elevElevateSession()">Elevate Session</div>
+      <div class="np-btn" style="background:var(--panel2);color:var(--text3);font-size:10px;letter-spacing:.3px" onclick="elevElevateSession()">+ Session</div>
+      <div class="np-btn np-ok" onclick="elevConfirm()">OK</div>
     </div>
   </div>
 </div>
@@ -966,7 +961,6 @@ function initFirebaseSync() {
       if (data.tableNotes) tableNotes = data.tableNotes; else tableNotes = {};
       if (data.firedCourses) firedCourses = data.firedCourses; else firedCourses = {};
       if (data.authLog) authLog = data.authLog;
-      setFirebaseOnline(true);
       if (data.orderCounter && data.orderCounter > orderCounter) orderCounter = data.orderCounter;
       if (data.resCounter && data.resCounter > resCounter) resCounter = data.resCounter;
       // Refresh all visible UI
@@ -1000,7 +994,6 @@ function showSyncStatus(status) {
     dot.style.background = 'var(--green2)';
     dot.style.boxShadow = '0 0 6px var(--green2)';
     label.textContent = 'Live';
-    setFirebaseOnline(true);
   } else if (status === 'saving') {
     dot.style.background = 'var(--amber2)';
     dot.style.boxShadow = '0 0 6px var(--amber2)';
@@ -1009,7 +1002,6 @@ function showSyncStatus(status) {
     dot.style.background = '#e05555';
     dot.style.boxShadow = '0 0 6px #e05555';
     label.textContent = 'Offline';
-    setFirebaseOnline(false);
   }
 }
 
@@ -1170,7 +1162,6 @@ var waiterSections = {};
 var _numpadCallback = null;
 var _numpadValue = '';
 var _numpadIdx = null;
-var _firebaseOnline = true;
 var WAITER_COLOURS = ['#2980b9','#27ae60','#8e44ad','#e67e22','#16a085','#c0392b','#d35400','#2c3e50'];
 
 // ── DEFAULT STAFF — Kevin, Vivian, Brandon, Simon all manager ──
@@ -1232,35 +1223,46 @@ function requireElevation(actionLabel, onSuccess) {
 function elevDigit(d) {
   if (_elevValue.length >= 5) return;
   _elevValue += d;
-  var masked = _elevValue.split('').map(function(){ return '●'; }).join('');
-  var pad = '·····'.slice(masked.length);
-  document.getElementById('elevDisplay').textContent = masked + pad;
-  if (_elevValue.length === 5) {
-    setTimeout(elevCheck, 120);
-  }
+  var dots = _elevValue.split('').map(function(){ return '●'; }).join('');
+  var pads = '·····'.slice(_elevValue.length);
+  document.getElementById('elevDisplay').textContent = dots + pads;
+  document.getElementById('elevErr').textContent = '';
 }
 
 function elevBack() {
+  if (_elevValue.length === 0) return;
   _elevValue = _elevValue.slice(0, -1);
-  var masked = _elevValue.split('').map(function(){ return '●'; }).join('');
-  var pad = '·····'.slice(masked.length);
-  document.getElementById('elevDisplay').textContent = masked + pad || '·····';
+  var dots = _elevValue.split('').map(function(){ return '●'; }).join('');
+  var pads = '·····'.slice(_elevValue.length);
+  document.getElementById('elevDisplay').textContent = dots + pads || '·····';
+  document.getElementById('elevErr').textContent = '';
 }
 
-function elevCheck() {
+function _elevAttempt(sessionElevate) {
+  if (_elevValue.length < 5) {
+    document.getElementById('elevErr').textContent = 'Enter all 5 digits';
+    return;
+  }
   var correct = (_elevValue === MANAGER_CODE);
   authLog.push({
     time: new Date().toISOString(),
     user: currentUser || 'Unknown',
     action: document.getElementById('elevActionLabel').textContent,
     success: correct,
-    method: 'code'
+    method: sessionElevate ? 'code-session' : 'code'
   });
   syncToFirebase();
 
   if (correct) {
+    if (sessionElevate) {
+      currentUserElevated = true;
+      _updateMgrChip();
+      toast((currentUser || 'User') + ' elevated to manager for this session', 'green');
+    } else {
+      toast('Manager access granted', 'green');
+    }
     document.getElementById('elevOverlay').style.display = 'none';
-    toast('Manager access granted', 'green');
+    document.getElementById('elevErr').textContent = '';
     var cb = _elevActionPending;
     _elevActionPending = null;
     _elevValue = '';
@@ -1271,47 +1273,17 @@ function elevCheck() {
     document.getElementById('elevErr').textContent = 'Incorrect code — try again';
     var modal = document.getElementById('elevModal');
     modal.classList.remove('shake');
-    void modal.offsetWidth; // reflow to restart animation
-    modal.classList.add('shake');
-    setTimeout(function(){ document.getElementById('elevErr').textContent = ''; }, 2000);
-  }
-}
-
-function elevElevateSession() {
-  // Elevate entire session (not just one action)
-  if (_elevValue.length < 5) { document.getElementById('elevErr').textContent = 'Enter the full 5-digit code first'; return; }
-  var correct = (_elevValue === MANAGER_CODE);
-  authLog.push({
-    time: new Date().toISOString(),
-    user: currentUser || 'Unknown',
-    action: 'Session elevation',
-    success: correct,
-    method: 'code'
-  });
-  syncToFirebase();
-
-  if (correct) {
-    currentUserElevated = true;
-    document.getElementById('elevOverlay').style.display = 'none';
-    _updateMgrChip();
-    toast((currentUser || 'User') + ' elevated to manager for this session', 'green');
-    var cb = _elevActionPending;
-    _elevActionPending = null;
-    _elevValue = '';
-    if (cb) cb();
-  } else {
-    _elevValue = '';
-    document.getElementById('elevDisplay').textContent = '·····';
-    document.getElementById('elevErr').textContent = 'Incorrect code';
-    var modal = document.getElementById('elevModal');
-    modal.classList.remove('shake');
     void modal.offsetWidth;
     modal.classList.add('shake');
   }
 }
 
+function elevConfirm() { _elevAttempt(false); }
+function elevElevateSession() { _elevAttempt(true); }
+
 function elevCancel() {
   document.getElementById('elevOverlay').style.display = 'none';
+  document.getElementById('elevErr').textContent = '';
   _elevValue = '';
   _elevActionPending = null;
 }
@@ -2769,11 +2741,7 @@ function updateKitchenBusyBadge() {
 // ══════════════════════════════════════════════════
 // OFFLINE INDICATOR
 // ══════════════════════════════════════════════════
-function setFirebaseOnline(online) {
-  _firebaseOnline = online;
-  var banner = document.getElementById('offlineBanner');
-  if (banner) { if (online) banner.classList.remove('visible'); else banner.classList.add('visible'); }
-}
+
 
 // ══════════════════════════════════════════════════
 // INIT
