@@ -1529,7 +1529,10 @@ function closeAddReservation(){document.getElementById('addResOverlay').style.di
 function saveReservation(){var name=document.getElementById('resNameInput').value.trim();if(!name){toast('Please enter a name','red');return;}var time=document.getElementById('resTimeInput').value,ps=parseInt(document.getElementById('resPartySizeInput').value)||2,tid=document.getElementById('resTableSelect').value||null,notes=document.getElementById('resNotesInput').value.trim();if(editingResId){for(var i=0;i<reservations.length;i++){if(reservations[i].id===editingResId){Object.assign(reservations[i],{name:name,time:time,partySize:ps,tableId:tid,notes:notes});break;}}}else reservations.push({id:'R'+resCounter++,name:name,time:time,partySize:ps,tableId:tid,notes:notes,status:'upcoming'});syncToFirebase();closeAddReservation();renderReservations();toast(editingResId?'Booking updated':'Booking added - '+name+' at '+time,'green');}
 
 function openStaff(){
-  if(!isManager()){requireElevation('Staff management is manager only.',function(){openStaff();});return;}
+  if(!isManager()){requireElevation('Staff management is manager only.',function(){_doOpenStaff();});return;}
+  _doOpenStaff();
+}
+function _doOpenStaff(){
   renderStaffList();document.getElementById('staffOverlay').style.display='flex';setTimeout(function(){document.getElementById('newStaffName').focus();},100);
 }
 function closeStaff(){document.getElementById('staffOverlay').style.display='none';rebuildWaiterSelects();}
@@ -1857,16 +1860,18 @@ function calcShiftStats() {
 // SHIFT OPEN
 // ══════════════════════════════════════════════════
 function openShift() {
-  if(!isManager() && !shiftState.isOpen){
-    requireElevation('Opening a shift requires manager authorisation.', function(){ openShift(); });
-    return;
-  }
   if (shiftState.isOpen) {
-    // Already open — show close dialog
-    if(!isManager()){requireElevation('Closing a shift requires manager authorisation.',function(){openShiftClose();});return;}
+    if(!isManager()){requireElevation('Closing a shift requires manager authorisation.', function(){ openShiftClose(); }); return;}
     openShiftClose();
     return;
   }
+  if(!isManager()){
+    requireElevation('Opening a shift requires manager authorisation.', function(){ _doOpenShift(); });
+    return;
+  }
+  _doOpenShift();
+}
+function _doOpenShift() {
   // Populate date
   var today = new Date();
   var dateStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
