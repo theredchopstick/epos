@@ -1251,7 +1251,6 @@ function _elevAttempt(sessionElevate) {
     success: correct,
     method: sessionElevate ? 'code-session' : 'code'
   });
-  syncToFirebase();
 
   if (correct) {
     if (sessionElevate) {
@@ -1266,7 +1265,10 @@ function _elevAttempt(sessionElevate) {
     var cb = _elevActionPending;
     _elevActionPending = null;
     _elevValue = '';
-    if (cb) cb();
+    setTimeout(function() {
+      if (cb) cb();
+      syncToFirebase();
+    }, 50);
   } else {
     _elevValue = '';
     document.getElementById('elevDisplay').textContent = '·····';
