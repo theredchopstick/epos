@@ -479,6 +479,131 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
   </div>
 </div>
 
+<!-- WEBHOOK COMPOSER MODAL -->
+<div class="overlay" id="webhookComposerOverlay" style="display:none" onclick="if(event.target===this)closeWebhookComposer()">
+  <div class="modal" style="width:580px;max-height:92vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <span class="modal-title">Discord Composer — Public Channel</span>
+      <button class="modal-close" onclick="closeWebhookComposer()">X</button>
+    </div>
+    <div class="modal-body" style="padding:0;overflow-y:auto;flex:1">
+
+      <!-- Mention -->
+      <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:16px;align-items:center">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);flex-shrink:0">Mention</div>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer"><input type="radio" name="wcMention" value="" checked style="accent-color:var(--blue2)"> None</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer"><input type="radio" name="wcMention" value="@here" style="accent-color:var(--blue2)"> @here</label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer"><input type="radio" name="wcMention" value="@everyone" style="accent-color:var(--blue2)"> @everyone</label>
+      </div>
+
+      <!-- Embed toggle -->
+      <div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="wcUseEmbed" checked style="accent-color:var(--blue2);width:13px;height:13px" onchange="toggleWcEmbed()">
+        <label for="wcUseEmbed" style="font-size:11px;color:var(--text2);cursor:pointer;flex:1">Use embed (rich card format)</label>
+        <span style="font-size:10px;color:var(--text3)">Or plain text only</span>
+      </div>
+
+      <!-- Plain text content -->
+      <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:6px">Message content <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(plain text, shown above embed)</span></div>
+        <textarea id="wcContent" placeholder="Optional — plain text above the embed. Supports @mentions." style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:8px;border-radius:3px;outline:none;resize:vertical;min-height:48px;box-sizing:border-box"></textarea>
+      </div>
+
+      <!-- Embed section -->
+      <div id="wcEmbedSection">
+
+        <!-- Colour -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);flex-shrink:0;width:80px">Colour</div>
+          <input type="color" id="wcColor" value="#c8251c" style="width:36px;height:28px;border:1px solid var(--border);border-radius:3px;cursor:pointer;background:none;padding:1px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <div onclick="document.getElementById('wcColor').value='#c8251c'" style="width:20px;height:20px;border-radius:3px;background:#c8251c;cursor:pointer;border:1px solid rgba(255,255,255,.2)" title="Red"></div>
+            <div onclick="document.getElementById('wcColor').value='#2e7d52'" style="width:20px;height:20px;border-radius:3px;background:#2e7d52;cursor:pointer;border:1px solid rgba(255,255,255,.2)" title="Green"></div>
+            <div onclick="document.getElementById('wcColor').value='#2980b9'" style="width:20px;height:20px;border-radius:3px;background:#2980b9;cursor:pointer;border:1px solid rgba(255,255,255,.2)" title="Blue"></div>
+            <div onclick="document.getElementById('wcColor').value='#c9973a'" style="width:20px;height:20px;border-radius:3px;background:#c9973a;cursor:pointer;border:1px solid rgba(255,255,255,.2)" title="Gold"></div>
+            <div onclick="document.getElementById('wcColor').value='#8e44ad'" style="width:20px;height:20px;border-radius:3px;background:#8e44ad;cursor:pointer;border:1px solid rgba(255,255,255,.2)" title="Purple"></div>
+            <div onclick="document.getElementById('wcColor').value='#2c3e50'" style="width:20px;height:20px;border-radius:3px;background:#2c3e50;cursor:pointer;border:1px solid rgba(255,255,255,.2)" title="Dark"></div>
+            <div onclick="document.getElementById('wcColor').value='#ffffff'" style="width:20px;height:20px;border-radius:3px;background:#ffffff;cursor:pointer;border:1px solid rgba(255,255,255,.2)" title="White"></div>
+          </div>
+        </div>
+
+        <!-- Author -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:6px">Author</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <input class="form-input" id="wcAuthorName" placeholder="Author name" style="flex:2;min-width:120px">
+            <input class="form-input" id="wcAuthorUrl" placeholder="Author URL (optional)" style="flex:2;min-width:120px">
+            <input class="form-input" id="wcAuthorIcon" placeholder="Author icon URL (optional)" style="flex:2;min-width:120px">
+          </div>
+        </div>
+
+        <!-- Title -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:6px">Title</div>
+          <div style="display:flex;gap:6px">
+            <input class="form-input" id="wcTitle" placeholder="Embed title" style="flex:2">
+            <input class="form-input" id="wcTitleUrl" placeholder="Title link URL (optional)" style="flex:2">
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:6px">Description <span style="font-weight:400;text-transform:none;letter-spacing:0">— supports **bold**, *italic*, `code`, > blockquote</span></div>
+          <textarea id="wcDescription" placeholder="Main embed body text…" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:8px;border-radius:3px;outline:none;resize:vertical;min-height:80px;box-sizing:border-box"></textarea>
+        </div>
+
+        <!-- Thumbnail -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:6px">Thumbnail <span style="font-weight:400;text-transform:none;letter-spacing:0">— small image top-right</span></div>
+          <input class="form-input" id="wcThumbnail" placeholder="Image URL">
+        </div>
+
+        <!-- Fields -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:center;margin-bottom:8px">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);flex:1">Fields <span style="font-weight:400;text-transform:none;letter-spacing:0">— up to 25 name/value pairs</span></div>
+            <button class="btn btn-ghost" style="font-size:10px;padding:2px 8px" onclick="addWcField()">+ Add Field</button>
+          </div>
+          <div id="wcFieldsList" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <!-- Image -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:6px">Image <span style="font-weight:400;text-transform:none;letter-spacing:0">— large image below description</span></div>
+          <input class="form-input" id="wcImage" placeholder="Image URL">
+        </div>
+
+        <!-- Footer -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:6px">Footer</div>
+          <div style="display:flex;gap:6px">
+            <input class="form-input" id="wcFooterText" placeholder="Footer text" value="Red Chopstick · Horton" style="flex:2">
+            <input class="form-input" id="wcFooterIcon" placeholder="Footer icon URL (optional)" style="flex:2">
+          </div>
+        </div>
+
+        <!-- Timestamp -->
+        <div style="padding:12px 18px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="wcTimestamp" checked style="accent-color:var(--blue2);width:13px;height:13px">
+            <label for="wcTimestamp" style="font-size:11px;color:var(--text2);cursor:pointer">Include timestamp (current time)</label>
+          </div>
+        </div>
+
+      </div><!-- end wcEmbedSection -->
+
+      <!-- Status -->
+      <div id="wcStatus" style="padding:8px 18px;font-size:11px;min-height:20px;color:var(--text3)"></div>
+    </div>
+
+    <div class="modal-footer" style="flex-shrink:0">
+      <button class="btn btn-ghost" onclick="closeWebhookComposer()">Cancel</button>
+      <button class="btn btn-ghost" style="font-size:11px" onclick="previewWcJson()">Preview JSON</button>
+      <button class="btn btn-primary" style="flex:1" onclick="sendWebhookComposer()">Send to Discord</button>
+    </div>
+  </div>
+</div>
+
 <!-- CANCELLATION REASON MODAL -->
 <div class="confirm-overlay" id="cancelShiftOverlay" style="display:none">
   <div class="confirm-modal" style="width:400px">
@@ -1043,15 +1168,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
       </div>
 
       <div style="border-top:1px solid var(--border);margin-top:0;padding:14px 18px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px">Post to Public Channel</div>
-        <textarea id="discordMessageInput" placeholder="Type a message to post to the public Discord channel…" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:8px;border-radius:3px;outline:none;resize:vertical;min-height:70px;box-sizing:border-box"></textarea>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-          <input type="checkbox" id="discordMsgPing" style="accent-color:var(--blue2);width:13px;height:13px">
-          <label for="discordMsgPing" style="font-size:11px;color:var(--text3);cursor:pointer">Ping @here</label>
-          <span style="flex:1"></span>
-          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="sendStaffDiscordMessage()">Send</button>
-        </div>
-        <div id="discordMsgStatus" style="font-size:10px;color:var(--text3);margin-top:4px;min-height:14px"></div>
+        <button class="btn btn-ghost" style="width:100%;font-size:11px;border-color:var(--blue);color:var(--blue2)" onclick="openWebhookComposer()">📣 Post to Discord</button>
       </div>
 
     </div>
@@ -1738,34 +1855,175 @@ function _doOpenStaff(){
   renderStaffList();document.getElementById('staffOverlay').style.display='flex';setTimeout(function(){document.getElementById('newStaffName').focus();},100);
 }
 function closeStaff(){document.getElementById('staffOverlay').style.display='none';rebuildWaiterSelects();}
-function sendStaffDiscordMessage() {
-  var msg = document.getElementById('discordMessageInput').value.trim();
-  var status = document.getElementById('discordMsgStatus');
-  if (!msg) { status.textContent = 'Please type a message first.'; status.style.color = '#f07070'; return; }
-  var ping = document.getElementById('discordMsgPing').checked;
-  var embed = {
-    color: 0xc8251c,
-    description: msg,
-    footer: { text: 'Red Chopstick · Horton' },
-    timestamp: new Date().toISOString()
-  };
+// ══════════════════════════════════════════════════
+// WEBHOOK COMPOSER
+// ══════════════════════════════════════════════════
+var _wcFieldCount = 0;
+
+function openWebhookComposer() {
+  _wcFieldCount = 0;
+  document.getElementById('wcFieldsList').innerHTML = '';
+  document.getElementById('wcContent').value = '';
+  document.getElementById('wcTitle').value = '';
+  document.getElementById('wcTitleUrl').value = '';
+  document.getElementById('wcDescription').value = '';
+  document.getElementById('wcAuthorName').value = 'Red Chopstick';
+  document.getElementById('wcAuthorUrl').value = '';
+  document.getElementById('wcAuthorIcon').value = '';
+  document.getElementById('wcThumbnail').value = '';
+  document.getElementById('wcImage').value = '';
+  document.getElementById('wcFooterText').value = 'Red Chopstick · Horton';
+  document.getElementById('wcFooterIcon').value = '';
+  document.getElementById('wcColor').value = '#c8251c';
+  document.getElementById('wcTimestamp').checked = true;
+  document.getElementById('wcUseEmbed').checked = true;
+  document.getElementById('wcEmbedSection').style.display = 'block';
+  document.querySelector('input[name="wcMention"][value=""]').checked = true;
+  document.getElementById('wcStatus').textContent = '';
+  document.getElementById('webhookComposerOverlay').style.display = 'flex';
+}
+
+function closeWebhookComposer() {
+  document.getElementById('webhookComposerOverlay').style.display = 'none';
+}
+
+function toggleWcEmbed() {
+  var on = document.getElementById('wcUseEmbed').checked;
+  document.getElementById('wcEmbedSection').style.display = on ? 'block' : 'none';
+}
+
+function addWcField() {
+  var list = document.getElementById('wcFieldsList');
+  var id = ++_wcFieldCount;
+  var div = document.createElement('div');
+  div.id = 'wcField_' + id;
+  div.style.cssText = 'display:flex;gap:6px;align-items:center';
+  div.innerHTML =
+    '<input class="form-input" id="wcFName_'+id+'" placeholder="Field name" style="flex:2">' +
+    '<input class="form-input" id="wcFVal_'+id+'" placeholder="Field value" style="flex:3">' +
+    '<label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text3);white-space:nowrap;cursor:pointer">' +
+      '<input type="checkbox" id="wcFInline_'+id+'" style="accent-color:var(--blue2)"> Inline' +
+    '</label>' +
+    '<button onclick="removeWcField('+id+')" style="padding:2px 6px;border-radius:3px;border:1px solid var(--border2);background:none;color:#f07070;cursor:pointer;font-size:11px;flex-shrink:0">×</button>';
+  list.appendChild(div);
+}
+
+function removeWcField(id) {
+  var el = document.getElementById('wcField_' + id);
+  if (el) el.parentNode.removeChild(el);
+}
+
+function _buildWcPayload() {
+  var mention = document.querySelector('input[name="wcMention"]:checked').value;
+  var content = document.getElementById('wcContent').value.trim();
+  var useEmbed = document.getElementById('wcUseEmbed').checked;
+
+  var body = {};
+
+  // Content: mention + optional plain text
+  var fullContent = (mention ? mention + ' ' : '') + content;
+  if (fullContent.trim()) body.content = fullContent.trim();
+
+  if (useEmbed) {
+    var colorHex = document.getElementById('wcColor').value.replace('#', '');
+    var colorInt = parseInt(colorHex, 16);
+
+    var embed = { color: colorInt };
+
+    var authorName = document.getElementById('wcAuthorName').value.trim();
+    var authorUrl  = document.getElementById('wcAuthorUrl').value.trim();
+    var authorIcon = document.getElementById('wcAuthorIcon').value.trim();
+    if (authorName) {
+      embed.author = { name: authorName };
+      if (authorUrl)  embed.author.url = authorUrl;
+      if (authorIcon) embed.author.icon_url = authorIcon;
+    }
+
+    var title    = document.getElementById('wcTitle').value.trim();
+    var titleUrl = document.getElementById('wcTitleUrl').value.trim();
+    if (title) { embed.title = title; if (titleUrl) embed.url = titleUrl; }
+
+    var desc = document.getElementById('wcDescription').value.trim();
+    if (desc) embed.description = desc;
+
+    var thumb = document.getElementById('wcThumbnail').value.trim();
+    if (thumb) embed.thumbnail = { url: thumb };
+
+    // Fields
+    var fields = [];
+    var fieldEls = document.querySelectorAll('[id^="wcFName_"]');
+    for (var i = 0; i < fieldEls.length; i++) {
+      var fid = fieldEls[i].id.replace('wcFName_', '');
+      var fn = document.getElementById('wcFName_' + fid).value.trim();
+      var fv = document.getElementById('wcFVal_'  + fid).value.trim();
+      var fi = document.getElementById('wcFInline_' + fid).checked;
+      if (fn || fv) fields.push({ name: fn || '\u200b', value: fv || '\u200b', inline: fi });
+    }
+    if (fields.length) embed.fields = fields;
+
+    var img = document.getElementById('wcImage').value.trim();
+    if (img) embed.image = { url: img };
+
+    var footerText = document.getElementById('wcFooterText').value.trim();
+    var footerIcon = document.getElementById('wcFooterIcon').value.trim();
+    if (footerText) {
+      embed.footer = { text: footerText };
+      if (footerIcon) embed.footer.icon_url = footerIcon;
+    }
+
+    if (document.getElementById('wcTimestamp').checked) {
+      embed.timestamp = new Date().toISOString();
+    }
+
+    body.embeds = [embed];
+  }
+
+  return body;
+}
+
+function previewWcJson() {
+  var payload = _buildWcPayload();
+  var status = document.getElementById('wcStatus');
+  status.style.color = 'var(--text3)';
+  status.textContent = JSON.stringify(payload, null, 2).slice(0, 400) + '…';
+}
+
+function sendWebhookComposer() {
+  var payload = _buildWcPayload();
+  var status = document.getElementById('wcStatus');
+
+  if (!payload.content && !payload.embeds) {
+    status.style.color = '#f07070';
+    status.textContent = 'Nothing to send — add some content first.';
+    return;
+  }
+
+  status.style.color = 'var(--text3)';
+  status.textContent = 'Sending…';
+
   fetch(WEBHOOK_PUBLIC, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: ping ? '@here' : undefined, embeds: [embed] }),
+    body: JSON.stringify(payload),
     keepalive: true
   }).then(function(r) {
     if (r.ok) {
-      status.textContent = 'Posted ✓';
       status.style.color = 'var(--green2)';
-      document.getElementById('discordMessageInput').value = '';
-      document.getElementById('discordMsgPing').checked = false;
-      setTimeout(function(){ status.textContent = ''; }, 3000);
+      status.textContent = '✓ Posted to Discord';
+      setTimeout(function(){ closeWebhookComposer(); }, 1200);
     } else {
-      r.text().then(function(t){ status.textContent = 'Failed: ' + t.slice(0,80); status.style.color = '#f07070'; });
+      r.text().then(function(t) {
+        status.style.color = '#f07070';
+        status.textContent = 'Discord error ' + r.status + ': ' + t.slice(0, 120);
+      });
     }
-  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.style.color = '#f07070'; });
+  }).catch(function(e) {
+    status.style.color = '#f07070';
+    status.textContent = 'Network error: ' + e.message;
+  });
 }
+
+function sendStaffDiscordMessage() {} // legacy stub — replaced by webhook composer
 function renderStaffList(){
   var c=document.getElementById('staffList');c.innerHTML='';
   if(!staff.length){c.innerHTML='<div style="color:var(--text3);font-style:italic;font-size:11px">No staff added</div>';return;}
