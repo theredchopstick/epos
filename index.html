@@ -1317,6 +1317,7 @@ function initFirebaseSync() {
           if (typeof s === 'string') return { name: s };
           var out = { name: s.name };
           if (s.notes) out.notes = s.notes;
+          if (s.pwHash) out.pwHash = s.pwHash;
           return out;
         });
         _staffDefaulted = true;
@@ -3173,6 +3174,7 @@ initFirebaseSync = function() {
           if (typeof s === 'string') return { name: s };
           var out = { name: s.name };
           if (s.notes) out.notes = s.notes;
+          if (s.pwHash) out.pwHash = s.pwHash;
           return out;
         });
         _staffDefaulted = true;
