@@ -1861,6 +1861,7 @@ var WEBHOOK_RECORDS = 'https://discord.com/api/webhooks/1508930208713932831/6KNz
 var WEBHOOK_PUBLIC  = 'https://discord.com/api/webhooks/1508957065597681664/cdib-LS7gPpXSgmgHGAPbuVzaBTRCOD8KRxH90_IRW-g40Q-Ly4UhfK3iJYeWL7o5Rzw';
 
 function postToDiscord(webhookUrl, content, embeds) {
+  if (!webhookUrl) { console.warn('postToDiscord: no URL provided'); return; }
   var body = {};
   if (content) body.content = content;
   if (embeds) body.embeds = embeds;
@@ -1869,7 +1870,11 @@ function postToDiscord(webhookUrl, content, embeds) {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(body)
   }).then(function(r) {
-    if (!r.ok) console.warn('Discord webhook failed:', r.status);
+    if (!r.ok) {
+      r.text().then(function(t){ console.warn('Discord webhook failed:', r.status, t); });
+    } else {
+      console.log('Discord webhook posted OK to', webhookUrl.slice(-20));
+    }
   }).catch(function(e) { console.warn('Discord webhook error:', e); });
 }
 
@@ -2110,7 +2115,14 @@ function confirmOpenShift() {
   shiftState.period = period;
   shiftState.staffOnShift = onShift;
   shiftState.openNotes = notes;
-  shiftState.snapOrders = completedOrders.length;
+
+  // Clear previous session data so EOD starts fresh for this shift
+  completedOrders = [];
+  voidLog = [];
+  tipLog = [];
+  kitchenDoneItems = {};
+  firedCourses = {};
+  shiftState.snapOrders = 0;
 
   // Update button
   var btn = document.getElementById('shiftBtn');
