@@ -19,6 +19,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .clock{font-family:var(--mono);font-size:12px;color:var(--text2);letter-spacing:1px}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--green2);box-shadow:0 0 6px var(--green2)}
 .mgr-chip{font-size:9px;padding:1px 5px;border-radius:2px;background:rgba(201,151,58,.2);color:var(--gold2);border:1px solid var(--gold);font-family:var(--mono);letter-spacing:.5px;text-transform:uppercase;margin-left:4px;vertical-align:middle}
+.pw-input{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:var(--font);font-size:14px;padding:10px 12px;border-radius:3px;outline:none;letter-spacing:2px;margin-bottom:6px}
+.pw-input:focus{border-color:var(--gold);}
+.pw-error{font-size:11px;color:var(--red2);min-height:16px;margin-bottom:6px}
+.pw-sub{font-size:11px;color:var(--text3);margin-bottom:14px}
 .elev-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1200;display:flex;align-items:center;justify-content:center}
 .elev-modal{background:var(--panel);border:1px solid var(--border2);border-radius:6px;width:280px;box-shadow:0 16px 50px rgba(0,0,0,.9);overflow:hidden}
 .elev-hdr{padding:14px 18px;background:var(--panel2);border-bottom:1px solid var(--border)}
@@ -1165,6 +1169,28 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
   </div>
 </div>
 
+<!-- PASSWORD MODAL -->
+<div class="overlay" id="pwOverlay" style="display:none">
+  <div class="modal" style="width:360px">
+    <div class="modal-header">
+      <span class="modal-title" id="pwTitle">Sign In</span>
+      <button class="modal-close" onclick="closePwOverlay()">X</button>
+    </div>
+    <div class="modal-body">
+      <div class="pw-sub" id="pwSub"></div>
+      <input class="pw-input" type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key==='Enter')pwConfirm()">
+      <div id="pwConfirmWrap" style="display:none">
+        <input class="pw-input" type="password" id="pwConfirmInput" placeholder="Confirm password" onkeydown="if(event.key==='Enter')pwConfirm()">
+      </div>
+      <div class="pw-error" id="pwError"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="pwConfirm()" id="pwBtn">Sign In</button>
+      <div style="margin-top:10px;text-align:center">
+        <span style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline" onclick="pwForgot()">Forgot password? Reset with manager code</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="staffOverlay" style="display:none" onclick="if(event.target===this)closeStaff()">
   <div class="modal" style="width:460px">
     <div class="modal-header">
@@ -1637,7 +1663,24 @@ function elevCancel() {
 }
 
 // ── WHO ARE YOU OVERLAY ──
+// ══════════════════════════════════════════════════
+// PASSWORD SYSTEM
+// ══════════════════════════════════════════════════
+
+async function sha256(str) {
+  var msgBuffer = new TextEncoder().encode(str);
+  var hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  var hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+}
+
+var _pwPendingName = null;   // name being signed in
+var _pwMode = null;          // 'signin' | 'setup' | 'reset'
+
 function showWhoOverlay() {
+  if (!currentUser && document.getElementById('elevOverlay').style.display === 'none' && document.getElementById('staffOverlay').style.display === 'none') {
+    // OK to show
+  }
   var overlay = document.getElementById('whoOverlay');
   var btns = document.getElementById('whoStaffBtns');
   btns.innerHTML = '';
@@ -1652,11 +1695,140 @@ function showWhoOverlay() {
       btn.className = 'btn btn-ghost';
       btn.style.cssText = 'width:100%;text-align:left;font-size:13px;padding:10px 14px;justify-content:flex-start';
       btn.textContent = name;
-      btn.onclick = function(){ setCurrentUser(name); };
+      btn.onclick = function(){ openPwOverlay(name); };
       btns.appendChild(btn);
     })(staff[i]);
   }
   overlay.style.display = 'flex';
+}
+
+function openPwOverlay(name) {
+  _pwPendingName = name;
+  document.getElementById('whoOverlay').style.display = 'none';
+  document.getElementById('pwError').textContent = '';
+  document.getElementById('pwInput').value = '';
+  document.getElementById('pwConfirmInput').value = '';
+
+  var member = _getStaffMember(name);
+  var hasPw = member && member.pwHash;
+
+  if (!hasPw) {
+    _pwMode = 'setup';
+    document.getElementById('pwTitle').textContent = 'Set Password — ' + name;
+    document.getElementById('pwSub').textContent = 'Welcome ' + name + '. This is your first sign-in. Please set a password.';
+    document.getElementById('pwConfirmWrap').style.display = 'block';
+    document.getElementById('pwBtn').textContent = 'Set Password & Sign In';
+  } else {
+    _pwMode = 'signin';
+    document.getElementById('pwTitle').textContent = 'Sign In — ' + name;
+    document.getElementById('pwSub').textContent = 'Enter your password to continue.';
+    document.getElementById('pwConfirmWrap').style.display = 'none';
+    document.getElementById('pwBtn').textContent = 'Sign In';
+  }
+
+  document.getElementById('pwOverlay').style.display = 'flex';
+  setTimeout(function(){ document.getElementById('pwInput').focus(); }, 100);
+}
+
+function closePwOverlay() {
+  document.getElementById('pwOverlay').style.display = 'none';
+  _pwPendingName = null;
+  _pwMode = null;
+}
+
+function pwConfirm() {
+  var pw = document.getElementById('pwInput').value;
+  var errEl = document.getElementById('pwError');
+  errEl.textContent = '';
+
+  if (!pw) { errEl.textContent = 'Please enter a password.'; return; }
+
+  if (_pwMode === 'setup' || _pwMode === 'reset') {
+    var confirm = document.getElementById('pwConfirmInput').value;
+    if (pw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+    if (pw !== confirm) { errEl.textContent = 'Passwords do not match.'; return; }
+    sha256(pw).then(function(hash) {
+      _setStaffPassword(_pwPendingName, hash);
+      var name = _pwPendingName;
+      closePwOverlay();
+      toast('Password set for ' + name, 'green');
+      setCurrentUser(name);
+    });
+  } else {
+    // Verify
+    var member = _getStaffMember(_pwPendingName);
+    if (!member || !member.pwHash) { setCurrentUser(_pwPendingName); return; }
+    sha256(pw).then(function(hash) {
+      if (hash === member.pwHash) {
+        var name = _pwPendingName;
+        closePwOverlay();
+        setCurrentUser(name);
+      } else {
+        document.getElementById('pwError').textContent = 'Incorrect password.';
+        document.getElementById('pwInput').value = '';
+        document.getElementById('pwInput').focus();
+        authLog.push({ time: new Date().toISOString(), user: _pwPendingName, action: 'Failed password attempt', success: false, method: 'password' });
+        syncToFirebase();
+      }
+    });
+  }
+}
+
+function pwForgot() {
+  if (!_pwPendingName) return;
+  var name = _pwPendingName;
+  requireElevation('Reset password for ' + name + ' — manager code required.', function() {
+    // Re-open in reset mode
+    _pwMode = 'reset';
+    document.getElementById('pwTitle').textContent = 'Reset Password — ' + name;
+    document.getElementById('pwSub').textContent = 'Set a new password for ' + name + '.';
+    document.getElementById('pwConfirmWrap').style.display = 'block';
+    document.getElementById('pwBtn').textContent = 'Set New Password';
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwConfirmInput').value = '';
+    document.getElementById('pwError').textContent = '';
+    document.getElementById('pwOverlay').style.display = 'flex';
+    setTimeout(function(){ document.getElementById('pwInput').focus(); }, 60);
+  });
+}
+
+function resetStaffPassword(name) {
+  requireElevation('Reset password for ' + name + ' — manager code required.', function() {
+    _pwPendingName = name;
+    _pwMode = 'reset';
+    document.getElementById('pwTitle').textContent = 'Reset Password — ' + name;
+    document.getElementById('pwSub').textContent = 'Set a new password for ' + name + '.';
+    document.getElementById('pwConfirmWrap').style.display = 'block';
+    document.getElementById('pwBtn').textContent = 'Set New Password';
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwConfirmInput').value = '';
+    document.getElementById('pwError').textContent = '';
+    document.getElementById('pwOverlay').style.display = 'flex';
+    setTimeout(function(){ document.getElementById('pwInput').focus(); }, 60);
+  });
+}
+
+function _getStaffMember(name) {
+  for (var i = 0; i < staff.length; i++) {
+    var s = staff[i];
+    var n = typeof s === 'string' ? s : s.name;
+    if (n === name) return typeof s === 'object' ? s : { name: n };
+  }
+  return null;
+}
+
+function _setStaffPassword(name, hash) {
+  for (var i = 0; i < staff.length; i++) {
+    var s = staff[i];
+    var n = typeof s === 'string' ? s : s.name;
+    if (n === name) {
+      if (typeof s === 'string') staff[i] = { name: n, pwHash: hash };
+      else staff[i].pwHash = hash;
+      syncToFirebase();
+      renderStaffList();
+      return;
+    }
+  }
 }
 
 function setCurrentUser(name) {
@@ -2208,9 +2380,12 @@ function renderStaffList(){
     (function(member,idx){
       var name=typeof member==='string'?member:member.name;
       var notes=typeof member==='object'?member.notes||'':'';
+      var hasPw=typeof member==='object'&&member.pwHash;
       var row=document.createElement('div');row.className='staff-row';
       row.innerHTML='<span class="staff-name">'+name+'</span>'+
         (notes?'<span style="font-size:10px;color:var(--text3);font-style:italic;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+notes+'</span>':'<span style="flex:1"></span>')+
+        '<span style="font-size:9px;color:'+(hasPw?'var(--green2)':'var(--amber2)')+'">'+( hasPw?'🔒':'⚠ No pw')+'</span>'+
+        '<button onclick="resetStaffPassword(\''+name+'\')" style="padding:2px 7px;border-radius:2px;border:1px solid var(--border2);background:none;color:var(--text3);font-size:10px;cursor:pointer;margin-left:6px">Reset PW</button>'+
         '<button class="staff-del" onclick="removeStaff('+idx+')">Remove</button>';
       c.appendChild(row);
     })(staff[i],i);
