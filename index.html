@@ -1042,6 +1042,18 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
         <div style="font-size:11px;color:var(--text2)">Code <span style="font-family:var(--mono);color:var(--gold2);letter-spacing:3px;font-size:13px">21393</span> unlocks protected actions for the current session. Share with managers only.</div>
       </div>
 
+      <div style="border-top:1px solid var(--border);margin-top:0;padding:14px 18px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px">Post to Public Channel</div>
+        <textarea id="discordMessageInput" placeholder="Type a message to post to the public Discord channel…" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:var(--font);font-size:12px;padding:8px;border-radius:3px;outline:none;resize:vertical;min-height:70px;box-sizing:border-box"></textarea>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="discordMsgPing" style="accent-color:var(--blue2);width:13px;height:13px">
+          <label for="discordMsgPing" style="font-size:11px;color:var(--text3);cursor:pointer">Ping @here</label>
+          <span style="flex:1"></span>
+          <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="sendStaffDiscordMessage()">Send</button>
+        </div>
+        <div id="discordMsgStatus" style="font-size:10px;color:var(--text3);margin-top:4px;min-height:14px"></div>
+      </div>
+
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary" style="flex:1" onclick="closeStaff()">Done</button>
@@ -1726,6 +1738,34 @@ function _doOpenStaff(){
   renderStaffList();document.getElementById('staffOverlay').style.display='flex';setTimeout(function(){document.getElementById('newStaffName').focus();},100);
 }
 function closeStaff(){document.getElementById('staffOverlay').style.display='none';rebuildWaiterSelects();}
+function sendStaffDiscordMessage() {
+  var msg = document.getElementById('discordMessageInput').value.trim();
+  var status = document.getElementById('discordMsgStatus');
+  if (!msg) { status.textContent = 'Please type a message first.'; status.style.color = '#f07070'; return; }
+  var ping = document.getElementById('discordMsgPing').checked;
+  var embed = {
+    color: 0xc8251c,
+    description: msg,
+    footer: { text: 'Red Chopstick · Horton' },
+    timestamp: new Date().toISOString()
+  };
+  fetch(WEBHOOK_PUBLIC, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: ping ? '@here' : undefined, embeds: [embed] }),
+    keepalive: true
+  }).then(function(r) {
+    if (r.ok) {
+      status.textContent = 'Posted ✓';
+      status.style.color = 'var(--green2)';
+      document.getElementById('discordMessageInput').value = '';
+      document.getElementById('discordMsgPing').checked = false;
+      setTimeout(function(){ status.textContent = ''; }, 3000);
+    } else {
+      r.text().then(function(t){ status.textContent = 'Failed: ' + t.slice(0,80); status.style.color = '#f07070'; });
+    }
+  }).catch(function(e) { status.textContent = 'Error: ' + e.message; status.style.color = '#f07070'; });
+}
 function renderStaffList(){
   var c=document.getElementById('staffList');c.innerHTML='';
   if(!staff.length){c.innerHTML='<div style="color:var(--text3);font-style:italic;font-size:11px">No staff added</div>';return;}
@@ -1868,7 +1908,8 @@ function postToDiscord(webhookUrl, content, embeds) {
   fetch(webhookUrl, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    keepalive: true
   }).then(function(r) {
     if (!r.ok) {
       r.text().then(function(t){ console.warn('Discord webhook failed:', r.status, t); });
