@@ -993,11 +993,16 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 
 <!-- ADD RESERVATION MODAL -->
 <div class="overlay" id="addResOverlay" style="display:none" onclick="if(event.target===this)closeAddReservation()">
-  <div class="modal" style="width:400px">
+  <div class="modal" style="width:420px">
     <div class="modal-header"><span class="modal-title" id="addResTitleLabel">Add Booking</span><button class="modal-close" onclick="closeAddReservation()">X</button></div>
     <div class="modal-body">
       <div class="form-row"><span class="form-label">Name</span><input class="form-input" id="resNameInput" placeholder="Guest name"></div>
-      <div class="form-row"><span class="form-label">Time</span><input class="form-input" id="resTimeInput" type="time" value="19:00"></div>
+      <div class="form-row"><span class="form-label">Shift</span>
+        <select class="form-select" id="resShiftSelect" onchange="updateResShiftInfo()">
+          <option value="">— Pending (no shift assigned) —</option>
+        </select>
+      </div>
+      <div id="resShiftInfo" style="font-size:10px;color:var(--text3);margin:-6px 0 8px 88px"></div>
       <div class="form-row"><span class="form-label">Party size</span><input class="form-input" id="resPartySizeInput" type="number" min="1" max="30" value="2"></div>
       <div class="form-row"><span class="form-label">Table</span><select class="form-select" id="resTableSelect"><option value="">- Unassigned -</option></select></div>
       <div class="form-row"><span class="form-label">Notes</span><input class="form-input" id="resNotesInput" placeholder="Dietary, occasion, preferences..."></div>
@@ -1041,6 +1046,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
           </select>
           <span style="font-size:11px;color:var(--text3);margin:0 8px;flex-shrink:0">from</span>
           <input class="form-input" id="psTime" type="time" value="17:30" style="max-width:100px">
+        </div>
+        <div class="form-row">
+          <span class="form-label">Max covers</span>
+          <input class="form-input" id="psMaxCovers" type="number" min="1" placeholder="e.g. 60" style="max-width:80px">
+          <span style="font-size:11px;color:var(--text3);margin-left:8px">Leave blank for unlimited</span>
         </div>
         <div class="form-row">
           <span class="form-label">Specials</span>
@@ -1836,16 +1846,153 @@ function openTransfer(){var o=getOrder(currentTable),active=o.items?o.items.filt
 function closeTransfer(){document.getElementById('transferOverlay').style.display='none';}
 function confirmTransfer(){if(!transferSelectedItems.length){toast('Select items to transfer','red');return;}if(!transferTarget){toast('Select a destination table','red');return;}var src=getOrder(currentTable),dest=getOrder(transferTarget);if(!dest.openedAt)dest.openedAt=new Date().toISOString();var idxs=transferSelectedItems.slice().sort(function(a,b){return b-a;});for(var i=0;i<idxs.length;i++){dest.items.push(Object.assign({},src.items[idxs[i]]));src.items.splice(idxs[i],1);}syncToFirebase();closeTransfer();buildTableGrid();renderOrderPanel();var dl='';for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===transferTarget){dl=TABLES[i].label;break;}}toast(idxs.length+' item(s) transferred to '+dl,'green');}
 
-function resStatus(res){var now=new Date(),parts=res.time.split(':'),rt=new Date();rt.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);var diff=(rt-now)/60000;if(res.status==='seated')return'seated';if(res.status==='done')return'done';if(diff<-15)return'late';if(diff<=15)return'now';return'upcoming';}
-function renderReservations(){var g=document.getElementById('resGrid');g.innerHTML='';var sorted=reservations.slice().sort(function(a,b){return a.time.localeCompare(b.time);});if(!sorted.length){g.innerHTML='<div style="color:var(--text3);font-style:italic;padding:20px;font-size:12px">No bookings today. Add one with the button above.</div>';updateResCounts();return;}for(var ri=0;ri<sorted.length;ri++){(function(res){var st=resStatus(res),tl='-';for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===res.tableId){tl=TABLES[i].label;break;}}var to='<option value="">- Assign table -</option>';for(var i=0;i<TABLES.length;i++){if(TABLES[i].seats>0)to+='<option value="'+TABLES[i].id+'"'+(res.tableId===TABLES[i].id?' selected':'')+'>'+TABLES[i].label+' ('+TABLES[i].seats+')</option>';}var sb=(st!=='seated'&&st!=='done')?'<button class="rc-btn green" onclick="seatReservation(\''+res.id+'\')">Seat</button>':'';var card=document.createElement('div');card.className='res-card '+st;card.innerHTML='<div class="rc-header"><span class="rc-name">'+res.name+'</span><div style="display:flex;align-items:center;gap:8px"><span class="rc-time">'+res.time+'</span><span class="res-status '+st+'">'+st+'</span></div></div><div class="rc-body"><div class="rc-detail"><span>Party:</span> '+res.partySize+' guest'+(res.partySize>1?'s':'')+'</div><div class="rc-detail"><span>Table:</span> '+(res.tableId?tl:'- unassigned -')+'</div>'+(res.notes?'<div class="rc-detail"><span>Notes:</span> '+res.notes+'</div>':'')+'</div><div class="rc-footer"><select class="rc-table-sel" onchange="assignResTable(\''+res.id+'\',this.value)">'+to+'</select>'+sb+'<button class="rc-btn" onclick="editReservation(\''+res.id+'\')">Edit</button><button class="rc-btn" onclick="deleteReservation(\''+res.id+'\')" style="color:#e05555">X</button></div>';g.appendChild(card);})(sorted[ri]);}updateResCounts();}
-function updateResCounts(){var n=reservations.filter(function(r){var s=resStatus(r);return s==='upcoming'||s==='now'||s==='late';}).length;document.getElementById('resCount').textContent=n;}
+// ── SHIFT RESERVATION HELPERS ──
+function getShiftById(id) {
+  for (var i=0;i<plannedShifts.length;i++){if(plannedShifts[i].id===id)return plannedShifts[i];}
+  return null;
+}
+function getShiftCoversBooked(shiftId) {
+  return reservations.filter(function(r){ return r.shiftId===shiftId&&r.status!=='cancelled'&&r.status!=='no-show'; })
+    .reduce(function(s,r){ return s+(r.partySize||1); },0);
+}
+function getUpcomingShifts() {
+  var now=Date.now();
+  return plannedShifts.filter(function(s){ return s.unixTs*1000>now-3600000; }).sort(function(a,b){ return a.unixTs-b.unixTs; });
+}
+function getShiftLabel(shift) {
+  if(!shift)return'Unknown';
+  var d=new Date(shift.unixTs*1000);
+  return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+' · '+shift.period+(shift.time?' from '+shift.time:'');
+}
+function populateResShiftSelect(selectedId) {
+  var sel=document.getElementById('resShiftSelect');if(!sel)return;
+  var shifts=getUpcomingShifts();
+  sel.innerHTML='<option value="">— Pending (no shift assigned) —</option>';
+  shifts.forEach(function(s){
+    var booked=getShiftCoversBooked(s.id);
+    var cap=s.maxCovers?(booked+'/'+s.maxCovers+' covers'):(booked+' covers booked');
+    var full=s.maxCovers&&booked>=s.maxCovers;
+    sel.innerHTML+='<option value="'+s.id+'"'+(s.id===selectedId?' selected':'')+(full?' disabled':'')+'>'+getShiftLabel(s)+' · '+cap+(full?' FULL':'')+' </option>';
+  });
+  updateResShiftInfo();
+}
+function updateResShiftInfo() {
+  var sel=document.getElementById('resShiftSelect');
+  var info=document.getElementById('resShiftInfo');
+  if(!sel||!info)return;
+  var shift=getShiftById(sel.value);
+  if(!shift){info.textContent='Will be held as pending until a shift is assigned.';info.style.color='var(--text3)';return;}
+  var booked=getShiftCoversBooked(shift.id);
+  var cap=shift.maxCovers?(booked+' of '+shift.maxCovers+' covers booked'):(booked+' covers booked, no limit');
+  info.textContent=cap;
+  info.style.color=(shift.maxCovers&&booked>=shift.maxCovers)?'var(--red2)':'var(--text3)';
+}
+function resStatus(res) {
+  if(res.status==='seated')return'seated';
+  if(res.status==='no-show')return'no-show';
+  if(res.status==='cancelled')return'cancelled';
+  if(!res.shiftId)return'pending';
+  var shift=getShiftById(res.shiftId);
+  if(!shift)return'upcoming';
+  var diff=(new Date(shift.unixTs*1000)-new Date())/60000;
+  if(diff<-30)return'late';
+  if(diff<=60)return'now';
+  return'upcoming';
+}
+function renderReservations() {
+  var g=document.getElementById('resGrid');g.innerHTML='';
+  var tableOpts='<option value="">- Assign table -</option>';
+  for(var i=0;i<TABLES.length;i++){if(TABLES[i].seats>0)tableOpts+='<option value="'+TABLES[i].id+'">'+TABLES[i].label+' ('+TABLES[i].seats+')</option>';}
+  function makeCard(res){
+    var st=resStatus(res),tl='-';
+    for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===res.tableId){tl=TABLES[i].label;break;}}
+    var to=tableOpts;if(res.tableId)to=to.replace('value="'+res.tableId+'"','value="'+res.tableId+'" selected');
+    var sb='';
+    if(st!=='seated'&&st!=='cancelled'&&st!=='no-show'){
+      sb+='<button class="rc-btn green" onclick="updateResStatus(\''+res.id+'\',\'seated\')">Seat</button>';
+      sb+='<button class="rc-btn" style="color:var(--amber2);border-color:var(--amber)" onclick="updateResStatus(\''+res.id+'\',\'no-show\')">No-show</button>';
+      sb+='<button class="rc-btn" style="color:#f07070;border-color:#922" onclick="updateResStatus(\''+res.id+'\',\'cancelled\')">Cancel</button>';
+    }
+    if(st==='seated'){sb+='<button class="rc-btn" style="color:var(--text3)" onclick="updateResStatus(\''+res.id+'\',\'upcoming\')">Unseated</button>';}
+    var disc=res.source==='discord'?'<span style="font-size:9px;padding:1px 5px;border-radius:2px;background:rgba(88,101,242,.2);color:#aab8ff;border:1px solid rgba(88,101,242,.4)">Discord</span>':'';
+    var card=document.createElement('div');card.className='res-card '+st;
+    card.innerHTML='<div class="rc-header"><span class="rc-name">'+res.name+' '+disc+'</span><span class="res-status '+st+'">'+st+'</span></div>'+
+      '<div class="rc-body"><div class="rc-detail"><span>Party:</span> '+res.partySize+' guest'+(res.partySize>1?'s':'')+'</div>'+
+      '<div class="rc-detail"><span>Table:</span> '+(res.tableId?tl:'- unassigned -')+'</div>'+(res.notes?'<div class="rc-detail"><span>Notes:</span> '+res.notes+'</div>':'')+
+      '</div><div class="rc-footer"><select class="rc-table-sel" onchange="assignResTable(\''+res.id+'\',this.value)">'+to+'</select>'+sb+
+      '<button class="rc-btn" onclick="editReservation(\''+res.id+'\')">Edit</button>'+
+      '<button class="rc-btn" onclick="deleteReservation(\''+res.id+'\')" style="color:#e05555">X</button></div>';
+    return card;
+  }
+  var pending=reservations.filter(function(r){return!r.shiftId;});
+  var shifts=getUpcomingShifts();var hasAny=pending.length>0;
+  if(pending.length){
+    var ph=document.createElement('div');
+    ph.style.cssText='font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--amber2);padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:6px';
+    ph.textContent='Pending — no shift assigned ('+pending.length+')';
+    g.appendChild(ph);pending.forEach(function(r){g.appendChild(makeCard(r));});
+  }
+  shifts.forEach(function(shift){
+    var sr=reservations.filter(function(r){return r.shiftId===shift.id;});if(!sr.length)return;
+    hasAny=true;
+    var booked=getShiftCoversBooked(shift.id);
+    var capStr=shift.maxCovers?(booked+'/'+shift.maxCovers+' covers'):(booked+' covers');
+    var full=shift.maxCovers&&booked>=shift.maxCovers;
+    var sh=document.createElement('div');
+    sh.style.cssText='font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);padding:12px 0 4px;border-bottom:1px solid var(--border);margin-bottom:6px;display:flex;justify-content:space-between';
+    sh.innerHTML='<span>'+getShiftLabel(shift)+'</span><span style="color:'+(full?'var(--red2)':'var(--green2)')+'">'+capStr+(full?' FULL':'')+'</span>';
+    g.appendChild(sh);sr.sort(function(a,b){return a.name.localeCompare(b.name);});sr.forEach(function(r){g.appendChild(makeCard(r));});
+  });
+  if(!hasAny){g.innerHTML='<div style="color:var(--text3);font-style:italic;padding:20px;font-size:12px">No bookings yet.</div>';}
+  updateResCounts();
+}
+function updateResCounts(){var n=reservations.filter(function(r){var s=resStatus(r);return s==='upcoming'||s==='now'||s==='late'||s==='pending';}).length;document.getElementById('resCount').textContent=n;}
 function assignResTable(id,tableId){for(var i=0;i<reservations.length;i++){if(reservations[i].id===id){reservations[i].tableId=tableId||null;break;}}syncToFirebase();renderReservations();}
-function seatReservation(id){var res=null;for(var i=0;i<reservations.length;i++){if(reservations[i].id===id){res=reservations[i];break;}}if(!res)return;res.status='seated';if(res.tableId){currentTable=res.tableId;var o=getOrder(currentTable);if(!o.guestName)o.guestName=res.name;if(o.covers===1)o.covers=Math.min(res.partySize,9);buildTableGrid();renderOrderPanel();}syncToFirebase();renderReservations();var tl='';for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===res.tableId){tl=TABLES[i].label;break;}}toast(res.name+' seated'+(res.tableId?' at '+tl:''),'green');}
+function updateResStatus(id,status){
+  var res=null;for(var i=0;i<reservations.length;i++){if(reservations[i].id===id){res=reservations[i];break;}}if(!res)return;
+  res.status=status;
+  if(status==='seated'&&res.tableId){currentTable=res.tableId;var o=getOrder(currentTable);if(!o.guestName)o.guestName=res.name;if(o.covers===1)o.covers=Math.min(res.partySize,9);buildTableGrid();renderOrderPanel();}
+  var tl='';for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===res.tableId){tl=TABLES[i].label;break;}}
+  toast(res.name+' marked as '+status+(status==='seated'&&res.tableId?' at '+tl:''),'green');
+  syncToFirebase();renderReservations();
+}
+function seatReservation(id){updateResStatus(id,'seated');}
 function deleteReservation(id){reservations=reservations.filter(function(r){return r.id!==id;});syncToFirebase();renderReservations();}
-function editReservation(id){var res=null;for(var i=0;i<reservations.length;i++){if(reservations[i].id===id){res=reservations[i];break;}}if(!res)return;editingResId=id;document.getElementById('resNameInput').value=res.name;document.getElementById('resTimeInput').value=res.time;document.getElementById('resPartySizeInput').value=res.partySize;document.getElementById('resTableSelect').value=res.tableId||'';document.getElementById('resNotesInput').value=res.notes||'';document.getElementById('addResTitleLabel').textContent='Edit Booking';document.getElementById('addResOverlay').style.display='flex';}
-function openAddReservation(){editingResId=null;document.getElementById('resNameInput').value='';document.getElementById('resTimeInput').value='19:00';document.getElementById('resPartySizeInput').value='2';document.getElementById('resNotesInput').value='';document.getElementById('addResTitleLabel').textContent='Add Booking';var sel=document.getElementById('resTableSelect');sel.innerHTML='<option value="">- Unassigned -</option>';for(var i=0;i<TABLES.length;i++){if(TABLES[i].seats>0)sel.innerHTML+='<option value="'+TABLES[i].id+'">'+TABLES[i].label+' ('+TABLES[i].seats+' seats)</option>';}document.getElementById('addResOverlay').style.display='flex';setTimeout(function(){document.getElementById('resNameInput').focus();},100);}
+function editReservation(id){
+  var res=null;for(var i=0;i<reservations.length;i++){if(reservations[i].id===id){res=reservations[i];break;}}if(!res)return;
+  editingResId=id;
+  document.getElementById('resNameInput').value=res.name;
+  document.getElementById('resPartySizeInput').value=res.partySize;
+  document.getElementById('resNotesInput').value=res.notes||'';
+  var sel=document.getElementById('resTableSelect');sel.innerHTML='<option value="">- Unassigned -</option>';
+  for(var i=0;i<TABLES.length;i++){if(TABLES[i].seats>0)sel.innerHTML+='<option value="'+TABLES[i].id+'"'+(TABLES[i].id===res.tableId?' selected':'')+'>'+TABLES[i].label+' ('+TABLES[i].seats+' seats)</option>';}
+  populateResShiftSelect(res.shiftId||'');
+  document.getElementById('addResTitleLabel').textContent='Edit Booking';
+  document.getElementById('addResOverlay').style.display='flex';
+}
+function openAddReservation(){
+  editingResId=null;document.getElementById('resNameInput').value='';document.getElementById('resPartySizeInput').value='2';document.getElementById('resNotesInput').value='';
+  document.getElementById('addResTitleLabel').textContent='Add Booking';
+  var sel=document.getElementById('resTableSelect');sel.innerHTML='<option value="">- Unassigned -</option>';
+  for(var i=0;i<TABLES.length;i++){if(TABLES[i].seats>0)sel.innerHTML+='<option value="'+TABLES[i].id+'">'+TABLES[i].label+' ('+TABLES[i].seats+' seats)</option>';}
+  populateResShiftSelect('');
+  document.getElementById('addResOverlay').style.display='flex';
+  setTimeout(function(){document.getElementById('resNameInput').focus();},100);
+}
 function closeAddReservation(){document.getElementById('addResOverlay').style.display='none';editingResId=null;}
-function saveReservation(){var name=document.getElementById('resNameInput').value.trim();if(!name){toast('Please enter a name','red');return;}var time=document.getElementById('resTimeInput').value,ps=parseInt(document.getElementById('resPartySizeInput').value)||2,tid=document.getElementById('resTableSelect').value||null,notes=document.getElementById('resNotesInput').value.trim();if(editingResId){for(var i=0;i<reservations.length;i++){if(reservations[i].id===editingResId){Object.assign(reservations[i],{name:name,time:time,partySize:ps,tableId:tid,notes:notes});break;}}}else reservations.push({id:'R'+resCounter++,name:name,time:time,partySize:ps,tableId:tid,notes:notes,status:'upcoming'});syncToFirebase();closeAddReservation();renderReservations();toast(editingResId?'Booking updated':'Booking added - '+name+' at '+time,'green');}
+function saveReservation(){
+  var name=document.getElementById('resNameInput').value.trim();if(!name){toast('Please enter a name','red');return;}
+  var ps=parseInt(document.getElementById('resPartySizeInput').value)||2;
+  var tid=document.getElementById('resTableSelect').value||null;
+  var notes=document.getElementById('resNotesInput').value.trim();
+  var shiftId=document.getElementById('resShiftSelect').value||null;
+  if(editingResId){
+    for(var i=0;i<reservations.length;i++){if(reservations[i].id===editingResId){Object.assign(reservations[i],{name:name,partySize:ps,tableId:tid,notes:notes,shiftId:shiftId,status:shiftId?'upcoming':'pending'});break;}}
+  } else {
+    reservations.push({id:'R'+resCounter++,name:name,partySize:ps,tableId:tid,notes:notes,shiftId:shiftId,status:shiftId?'upcoming':'pending',source:'manual'});
+  }
+  syncToFirebase();closeAddReservation();renderReservations();toast(editingResId?'Booking updated':'Booking added — '+name,'green');
+}
 
 function openStaff(){
   if(!isManager()){requireElevation('Staff management is manager only.',function(){_doOpenStaff();});return;}
@@ -3361,6 +3508,7 @@ function savePlannedShift() {
     event: v.event,
     supervisors: v.supervisors,
     bookingLink: v.bookingLink,
+    maxCovers: v.maxCovers || 0,
     postReminder: v.postReminder,
     reminderFired: false,
     createdAt: new Date().toISOString()
@@ -3474,6 +3622,7 @@ function editPlannedShift(id) {
   document.getElementById('psEvent').value = shift.event || '';
   document.getElementById('psBookingLink').value = shift.bookingLink || '';
   document.getElementById('psPostReminder').checked = shift.postReminder !== false;
+  document.getElementById('psMaxCovers').value = shift.maxCovers || '';
   document.getElementById('psPostNow').checked = false;
   document.getElementById('psDeleteBtn').style.display = 'inline-flex';
   document.getElementById('plannedShiftFormTitle').textContent = 'Edit Shift';
