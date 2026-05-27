@@ -1730,7 +1730,7 @@ function tick(){document.getElementById('clock').textContent=new Date().toLocale
 setInterval(tick,1000);tick();setInterval(buildTableGrid,30000);
 
 function seatedMinutes(o){if(!o||!o.openedAt)return null;return Math.floor((Date.now()-new Date(o.openedAt).getTime())/60000);}
-function timerDisplay(m){if(m===null)return'';var h=Math.floor(m/60),mn=m%60;return h>0?(h+'h '+mn+'m'):(mn+'m');}
+function timerDisplay(m){if(m===null||m===undefined)return'';var total=Math.max(0,Math.round(m*60));var h=Math.floor(total/3600),mn=Math.floor((total%3600)/60),s=total%60;return String(h).padStart(2,'0')+':'+String(mn).padStart(2,'0')+':'+String(s).padStart(2,'0');}
 function timerClass(m){if(m===null)return'';if(m<60)return'timer-ok';if(m<90)return'timer-warn';return'timer-late';}
 function updateTimerBadge(){var o=tableOrders[currentTable],badge=document.getElementById('opTimerBadge');if(!o||!o.openedAt||!o.items||!o.items.length){badge.textContent='';badge.style.cssText='';return;}var m=seatedMinutes(o),cls=timerClass(m);badge.textContent='Timer: '+timerDisplay(m);if(cls==='timer-ok'){badge.style.background='rgba(46,125,82,.2)';badge.style.color='var(--green2)';}else if(cls==='timer-warn'){badge.style.background='rgba(183,119,13,.2)';badge.style.color='var(--amber2)';}else{badge.style.background='rgba(200,37,28,.2)';badge.style.color='#e05555';}badge.style.borderRadius='3px';badge.style.padding='2px 6px';}
 
