@@ -1899,19 +1899,53 @@ function sanitiseOrders(orders) {
 function getOrder(id){if(!tableOrders[id])tableOrders[id]={items:[],covers:1,guestName:'',waiter:'',openedAt:null,status:'open',ref:orderCounter++,discount:null};var o=tableOrders[id];if(!o.items||!Array.isArray(o.items))o.items=[];return o;}
 
 // ══ CLOCK ══
-function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});updateTimerBadge();var ke=document.getElementById('kdsClock');if(ke)ke.textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+function tick(){
+  var now = new Date();
+  var t = now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('clock').textContent = t;
+  var ke = document.getElementById('kdsClock');
+  if (ke) ke.textContent = t;
+  updateTimerBadge();
+  tickTimers();
+}
 setInterval(tick,1000);tick();setInterval(buildTableGrid,30000);
 
-function seatedMinutes(o){if(!o||!o.openedAt)return null;return Math.floor((Date.now()-new Date(o.openedAt).getTime())/60000);}
-function timerDisplay(m){if(m===null||m===undefined)return'';var total=Math.max(0,Math.round(m*60));var h=Math.floor(total/3600),mn=Math.floor((total%3600)/60),s=total%60;return String(h).padStart(2,'0')+':'+String(mn).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+function seatedMinutes(o){if(!o||!o.openedAt)return null;return (Date.now()-new Date(o.openedAt).getTime())/60000;}
+function timerDisplay(m){if(m===null||m===undefined)return'';var totalSecs=Math.max(0,Math.round(m*60));var h=Math.floor(totalSecs/3600);var mn=Math.floor((totalSecs%3600)/60);var s=totalSecs%60;if(h>0)return String(h).padStart(2,'0')+':'+String(mn).padStart(2,'0')+':'+String(s).padStart(2,'0');return String(mn).padStart(2,'0')+':'+String(s).padStart(2,'0');}
 function timerClass(m){if(m===null)return'';if(m<60)return'timer-ok';if(m<90)return'timer-warn';return'timer-late';}
 function updateTimerBadge(){var o=tableOrders[currentTable],badge=document.getElementById('opTimerBadge');if(!o||!o.openedAt||!o.items||!o.items.length){badge.textContent='';badge.style.cssText='';return;}var m=seatedMinutes(o),cls=timerClass(m);badge.textContent='Timer: '+timerDisplay(m);if(cls==='timer-ok'){badge.style.background='rgba(46,125,82,.2)';badge.style.color='var(--green2)';}else if(cls==='timer-warn'){badge.style.background='rgba(183,119,13,.2)';badge.style.color='var(--amber2)';}else{badge.style.background='rgba(200,37,28,.2)';badge.style.color='#e05555';}badge.style.borderRadius='3px';badge.style.padding='2px 6px';}
+
+function tickTimers() {
+  // Update table grid timers in-place without full rebuild
+  var tids = Object.keys(tableOrders);
+  for (var i = 0; i < tids.length; i++) {
+    var tid = tids[i];
+    var o = tableOrders[tid];
+    if (!o || !o.openedAt || !o.items || !o.items.length) continue;
+    var m = seatedMinutes(o);
+    if (m === null) continue;
+    var tc = timerClass(m);
+    var display = timerDisplay(m);
+    // Update table grid timer element
+    var timerEl = document.querySelector('.table-btn[data-tid="' + tid + '"] .table-timer');
+    if (timerEl) {
+      timerEl.textContent = display;
+      timerEl.className = 'table-timer ' + tc;
+    }
+    // Update floor plan timer element
+    var fpTimerEl = document.querySelector('.fp-table[data-tid="' + tid + '"] .fp-timer');
+    if (fpTimerEl) {
+      fpTimerEl.textContent = display;
+      fpTimerEl.className = 'fp-timer ' + tc;
+    }
+  }
+}
 
 // ══ VIEWS ══
 function switchView(v,el){var vs=document.querySelectorAll('.view');for(var i=0;i<vs.length;i++)vs[i].classList.remove('active');var ts=document.querySelectorAll('.topbar-tab');for(var i=0;i<ts.length;i++)ts[i].classList.remove('active');var ve=document.getElementById('view'+v.charAt(0).toUpperCase()+v.slice(1));if(ve)ve.classList.add('active');if(el)el.classList.add('active');if(v==='orders')renderOrders();if(v==='eod')renderEod();if(v==='reservations')renderReservations();if(v==='floorplan')renderFloorPlan();if(v==='kitchen')renderKitchen();}
 
 // ══ TABLE GRID ══
-function buildTableGrid(){var g=document.getElementById('tableGrid'),st=g.scrollTop;g.innerHTML='';var floors=['Ground','Top','Other'],fl={Ground:'Ground Floor',Top:'Top Floor',Other:'Other'};for(var fi=0;fi<floors.length;fi++){var floor=floors[fi],ft=TABLES.filter(function(t){return t.floor===floor;});if(!ft.length)continue;var hdr=document.createElement('div');hdr.style.cssText='grid-column:1/-1;padding:6px 4px 2px;font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);border-top:1px solid var(--border);margin-top:4px';hdr.textContent=fl[floor];g.appendChild(hdr);for(var ti=0;ti<ft.length;ti++){(function(t){var o=tableOrders[t.id],hi=o&&o.items&&o.items.length>0,tot=hi?o.items.filter(function(i){return !i.voided;}).reduce(function(s,i){return s+i.price*i.qty;},0):0,m=hi?seatedMinutes(o):null,tc=hi&&m!==null?timerClass(m):'';var div=document.createElement('div'),cls='table-btn'+(t.id===currentTable?' active':'')+(hi?' occupied':'')+(tc==='timer-late'?' warn':'')+(t.wide?' table-btn-wide':'');div.className=cls;var h='<div class="table-num">'+t.label+'</div>';if(t.seats)h+='<div style="font-size:9px;color:var(--text3)">'+t.seats+' seats</div>';if(o&&o.guestName)h+='<div class="table-guest">'+o.guestName+'</div>';if(o&&o.waiter)h+='<div style="font-size:9px;color:var(--blue2)">'+o.waiter+'</div>';if(hi)h+='<div class="table-total">$'+tot.toFixed(2)+'</div>';if(hi&&m!==null)h+='<div class="table-timer '+tc+'">'+timerDisplay(m)+'</div>';div.innerHTML=h;div.onclick=function(){currentTable=t.id;buildTableGrid();renderOrderPanel();};g.appendChild(div);})(ft[ti]);}}g.scrollTop=st;}
+function buildTableGrid(){var g=document.getElementById('tableGrid'),st=g.scrollTop;g.innerHTML='';var floors=['Ground','Top','Other'],fl={Ground:'Ground Floor',Top:'Top Floor',Other:'Other'};for(var fi=0;fi<floors.length;fi++){var floor=floors[fi],ft=TABLES.filter(function(t){return t.floor===floor;});if(!ft.length)continue;var hdr=document.createElement('div');hdr.style.cssText='grid-column:1/-1;padding:6px 4px 2px;font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);border-top:1px solid var(--border);margin-top:4px';hdr.textContent=fl[floor];g.appendChild(hdr);for(var ti=0;ti<ft.length;ti++){(function(t){var o=tableOrders[t.id],hi=o&&o.items&&o.items.length>0,tot=hi?o.items.filter(function(i){return !i.voided;}).reduce(function(s,i){return s+i.price*i.qty;},0):0,m=hi?seatedMinutes(o):null,tc=hi&&m!==null?timerClass(m):'';var div=document.createElement('div'),cls='table-btn'+(t.id===currentTable?' active':'')+(hi?' occupied':'')+(tc==='timer-late'?' warn':'')+(t.wide?' table-btn-wide':'');div.className=cls;div.setAttribute('data-tid',t.id);var h='<div class="table-num">'+t.label+'</div>';if(t.seats)h+='<div style="font-size:9px;color:var(--text3)">'+t.seats+' seats</div>';if(o&&o.guestName)h+='<div class="table-guest">'+o.guestName+'</div>';if(o&&o.waiter)h+='<div style="font-size:9px;color:var(--blue2)">'+o.waiter+'</div>';if(hi)h+='<div class="table-total">$'+tot.toFixed(2)+'</div>';if(hi&&m!==null)h+='<div class="table-timer '+tc+'">'+timerDisplay(m)+'</div>';div.innerHTML=h;div.onclick=function(){currentTable=t.id;buildTableGrid();renderOrderPanel();};g.appendChild(div);})(ft[ti]);}}g.scrollTop=st;}
 
 // ══ MENU ══
 function switchCat(el){currentCat=el.dataset.cat;var b=document.querySelectorAll('#menuToolbar .cat-btn');for(var i=0;i<b.length;i++)b[i].classList.remove('active');el.classList.add('active');document.getElementById('searchInput').value='';renderMenu();}
@@ -2446,7 +2480,7 @@ function renderFloorPlan(){
             m=hi?seatedMinutes(o):null,status='fp-free';
         if(hi){if(m!==null&&m>=90)status='fp-late';else if(o.status==='kitchen')status='fp-kitchen';else status='fp-occupied';}
         var tc=m!==null?timerClass(m):'',div=document.createElement('div');
-        div.className='fp-table '+status+(t.wide?' fp-wide':'');
+        div.className='fp-table '+status+(t.wide?' fp-wide':'');div.setAttribute('data-tid',t.id);
         // Waiter section colour tint
         if(o&&o.waiter){var wc=getWaiterColour(o.waiter);div.style.borderColor=wc;div.style.boxShadow='0 0 0 1px '+wc+'44';}
         var h='<div class="fp-num">'+t.label+'</div>';
@@ -3131,14 +3165,12 @@ applyDiscount = function() {
 // Override sendKitchen to notify large party seating
 var _orig_sendKitchen = sendKitchen;
 sendKitchen = function() {
-  var ticketsBefore = _countOpenTickets();
   var o = getOrder(currentTable);
   var covers = o.covers||1;
   var isFirstSend = o.items.filter(function(i){return i.sent;}).length === 0;
   _doSendKitchen();
-  // Play sound if new ticket was created
-  var ticketsAfter = _countOpenTickets();
-  if (ticketsAfter > ticketsBefore) playKitchenSound();
+  // Play sound on every kitchen send
+  playKitchenSound();
   if (isFirstSend && covers >= 6) {
     var tl='';for(var i=0;i<TABLES.length;i++){if(TABLES[i].id===currentTable){tl=TABLES[i].label;break;}}
     notifyLargeParty(tl, covers, o.guestName);
