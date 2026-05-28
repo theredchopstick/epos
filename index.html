@@ -1251,6 +1251,9 @@ function waitForFirebase(cb) {
   }
 }
 
+var _localWritePending = false;
+var _localWriteTimer = null;
+
 function syncToFirebase() {
   if (!_syncEnabled) return;
   clearTimeout(_syncTimeout);
@@ -1279,6 +1282,10 @@ function syncToFirebase() {
         kitchenClosed: kitchenClosed,
         waitlist: waitlist
       };
+      // Flag that the next onValue callback is our own echo — skip the merge
+      _localWritePending = true;
+      clearTimeout(_localWriteTimer);
+      _localWriteTimer = setTimeout(function() { _localWritePending = false; }, 5000);
       window._fbSet(window._fbRef(window._db, 'epos'), JSON.parse(JSON.stringify(payload)));
     } catch(e) {
       console.warn('Firebase sync error:', e);
@@ -1299,6 +1306,14 @@ function initFirebaseSync() {
       _staffDefaulted = true;
       return;
     }
+      // If this callback is the echo of our own write, skip the merge —
+      // our local state is already correct and merging would clobber it.
+      if (_localWritePending) {
+        _localWritePending = false;
+        clearTimeout(_localWriteTimer);
+        showSyncStatus('synced');
+        return;
+      }
       // Merge remote state — remote wins for most things
       if (data.tableOrders) tableOrders = sanitiseOrders(data.tableOrders);
       if (data.completedOrders) completedOrders = data.completedOrders;
