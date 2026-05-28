@@ -1361,7 +1361,7 @@ function initFirebaseSync() {
     // value) so we don't replay a stale alert from a prior session.
     var _kitchenAlertReady = false;
     var _lastKitchenAlertTime = 0;
-    var kitchenAlertRef = window._fbRef(window._db, 'epos/kitchenAlert');
+    var kitchenAlertRef = window._fbRef(window._db, 'kitchenAlert');
     window._fbOnValue(kitchenAlertRef, function(snap) {
       var val = snap.val();
       if (!_kitchenAlertReady) {
@@ -2063,11 +2063,11 @@ function sendKitchen(){
 function _doSendKitchen(){var o=getOrder(currentTable),fresh=o.items.filter(function(i){return !i.sent&&!i.voided;});if(!fresh.length){toast('No new items to send','red');return;}for(var i=0;i<fresh.length;i++)fresh[i].sent=true;o.status='kitchen';syncToFirebase();updateOrderCount();buildTableGrid();renderOrderPanel();playKitchenSound();broadcastKitchenAlert('send');toast(fresh.length+' item(s) sent to kitchen','green');}
 
 // ── KITCHEN ALERT BROADCAST ──────────────────────────────
-// Writes a timestamp to epos/kitchenAlert so every connected
+// Writes a timestamp to kitchenAlert/ (outside epos/) so every connected
 // device receives the onValue event and plays the sound.
 function broadcastKitchenAlert(type) {
   waitForFirebase(function() {
-    var alertRef = window._fbRef(window._db, 'epos/kitchenAlert');
+    var alertRef = window._fbRef(window._db, 'kitchenAlert');
     window._fbSet(alertRef, { time: Date.now(), type: type || 'send' })
       .catch(function(e) { console.warn('kitchenAlert write failed:', e); });
   });
